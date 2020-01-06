@@ -2,11 +2,12 @@
 # Environment contains information about the possible words,
 # target + distractor images and score for the game
 from torchvision import transforms, utils
-import numpy
+import numpy as np
 from PIL import Image
 import skimage
 from skimage import io
 import matplotlib.pyplot as plt
+import os
 
 
 # loads an image from a directory and applies a transformation to it
@@ -15,14 +16,16 @@ def load_image(path):
     # transformation rescales + randomly crops the image to 32*32
     transform = transforms.Compose(
             [
-            transforms.Resize((128,128)),
-            transforms.RandomCrop(32)
+            transforms.Resize((256,256)),
+            transforms.RandomCrop(224),
+            transforms.ToTensor()
             ])
-    plt.figure()
     image = transform(image)
-    arr = numpy.array(image)
-    plt.imshow(arr)
-    plt.show()
+    arr = np.array(image)
+    # plt.figure()
+    # plt.imshow(arr)
+    # plt.show()
+    return image
 
 def get_all_images(path):
     return [i for i in path if i.endswith('.jpg')]
@@ -57,7 +60,7 @@ class Environment:
         ## Temp var for sender training, remove later
         self.target_class = im1_dir
 
-        im1_path, im2_path = os.path.join(self.data_dir, 'images', im1_dir),
+        im1_path, im2_path = os.path.join(self.data_dir, 'images', im1_dir),\
         os.path.join(self.data_dir, 'images', im2_dir)
 
         # select random image in dirs
@@ -93,4 +96,4 @@ class Environment:
         self.word = None
         self.target_class = None
 
-load_image("data/images/cat/0.jpg")
+#load_image("data/images/cat/0.jpg")

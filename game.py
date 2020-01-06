@@ -2,10 +2,10 @@
 import sys
 import os
 import numpy as np
-from agent_tf2 import Agents
+from agent import Agents
 import env
 import random
-import tensorflow as tf
+import torch
 import sys
 import argparse
 import yaml
@@ -20,7 +20,7 @@ def shuffle_image_activations(im_acts):
     shuffled = im_acts[reordering]
     return (shuffled, target_ind)
 
-def run_game():
+def run_game(config):
     # dimensionality of the image embedding
     image_embedding_dim = config['image_embedding_dim']
     # dimensionality of the word embedding
@@ -66,61 +66,69 @@ def run_game():
 
     # loads the pretrained VGG16 model
     model = models.vgg16()
-
+    # creates a batch to store all game rounds
     batch = []
-
+    # mathematical definition of game as explained by Lazaridou
     Game = namedtuple("Game", ["im_acts", "target_acts", "distractor_acts",
     "word_probs", "image_probs", "target", "word", "selection", "reward"])
 
     total_reward = 0
 
-    for i in range(iterations):
-        print("Round {}/{}".format(i, iterations), end = "\n")
-        # gets a new target/distractor pair from the environment
-        target_image, distractor_image = environ.get_images()
-        # TODO: check if this is needed
-        # reshapes images into expected shape for VGG model
-        target_image = target_image.reshape((1, 224, 224, 3))
-        distractor_image = distractor_image.reshape((1, 224, 224, 3))
-        # sets the target class variable
-        target_class = environ.target_class
-        # vertically stacks numpy array of image
-        td_images = np.vstack([target_image, distractor_image])
-        # gets actual classifications from prediction of vgg model
-        td_acts = model.predict(td_images)
-        # reshapes predictions
-        target_acts = td_acts[0].reshape((1, 1000))
-        distractor_acts = td_acts[1].reshape((1, 1000))
-        # gets the sender's chosen word and the associated probability
-        word_probs, word_selected = agents.get_sender_word_probs(
-        target_acts, distractor_acts)
-        # gets the target image
-        # TODO: check if this can be modified for more than 2 images
-        reordering = np.array([0,1])
-        random.shuffle(reordering)
-        target = np.where(reordering==0)[0]
-        # sets images as predictions
-        img_array = [target_acts, distractor_acts]
-        im1_acts, im2_acts = [img_array[reordering[i]]
-        for i, img in enumerate(img_array)]
-        # gets the receiver's chosen target and associated probability
-        receiver_probs, image_selected = agents.get_receiver_selection(
-        word_selected, im1_acts, im2_acts)
-        # gives a payoff if the target is the same as the selected image
-        reward = 0.0
-        if target == image_selected:
-            reward = 1.0
-        # adds the game just played to the batch
-        batch.append(Game(shuffled_acts, target_acts, distractor_acts,
-        word_probs, receiver_probs, target, word_selected, image_selected,
-        reward))
+    with torch.no_grad():
+        for i in range(iterations):
+            print("Round {}/{}".format(i, iterations), end = "\n")
+            # gets a new target/distractor pair from the environment
+            target_image, distractor_image = environ.get_images()
+            # TODO: check if this is needed
+            # reshapes images into expected shape for VGG model
+            target_image = target_image.reshape((1, 3, 224, 224))
+            distractor_image = distractor_image.reshape((1, 3,224, 224))
 
-        #TODO: implement weight updates
-        if (i+1) % mini_batch_size == 0:
-            print('updating the agent weights')
+            # target_image = target_image.reshape((64, 3, 3, 3))
+            # distractor_image = distractor_image.reshape((64, 3, 3, 3))
 
-        print(target_class, reward)
-        tot_reward += reward
+            # sets the target class variable
+            target_class = environ.target_class
+            # vertically stacks numpy array of image
+            td_images = np.vstack([target_image, distractor_image])
+
+            # gets actual classifications from prediction of vgg model
+            td_images_tensor = torch.from_numpy(td_images)
+            print(td_images_tensor.shape)
+            td_acts = model(td_images_tensor)
+            # reshapes predictions
+            target_acts = td_acts[0].reshape((1, 1000))
+            distractor_acts = td_acts[1].reshape((1, 1000))
+            # gets the sender's chosen word and the associated probability
+            word_probs, word_selected = agents.get_sender_word_probs(
+            target_acts, distractor_acts)
+            # gets the target image
+            # TODO: check if this can be modified for more than 2 images
+            reordering = np.array([0,1])
+            random.shuffle(reordering)
+            target = np.where(reordering==0)[0]
+            # sets images as predictions
+            img_array = [target_acts, distractor_acts]
+            im1_acts, im2_acts = [img_array[reordering[i]]
+            for i, img in enumerate(img_array)]
+            # gets the receiver's chosen target and associated probability
+            receiver_probs, image_selected = agents.get_receiver_selection(
+            word_selected, im1_acts, im2_acts)
+            # gives a payoff if the target is the same as the selected image
+            reward = 0.0
+            if target == image_selected:
+                reward = 1.0
+            # adds the game just played to the batch
+            batch.append(Game(shuffled_acts, target_acts, distractor_acts,
+            word_probs, receiver_probs, target, word_selected, image_selected,
+            reward))
+
+            #TODO: implement weight updates
+            if (i+1) % mini_batch_size == 0:
+                print('updating the agent weights')
+
+            print(target_class, reward)
+            tot_reward += reward
 
 def main():
 
@@ -129,8 +137,9 @@ def main():
     args = parser.parse_args()
     conf = args.conf
 
+    # TODO: fix the warning that comes up when loading with default load
     with open(conf) as g:
-        config = yaml.load(g)
+        config = yaml.load(g, Loader=yaml.FullLoader)
 
     run_game(config)
 
