@@ -27,7 +27,6 @@ class LinearSigmoid(Module):
       # returns the result of a Sigmoid function provided the inputs, weights
       # and the biases
       input = torch.mm(inputs, self.w).add(self.b)
-      # return Sigmoid(torch.mm(inputs, self.w) + self.b)
       return self.sig(input)
 
 # class representing the model that generates probabilities for each word
@@ -35,11 +34,11 @@ class WordProbabilityModel():
     def __init__(self, image_embedding_dim):
         super(WordProbabilityModel, self).__init__()
         # dense network implementation
-        self.hidden_layer = Linear(2, 2* image_embedding_dim)
-        self.output_layer = Linear(2* image_embedding_dim, 2)
+        self.hidden_layer = Linear(2, 2 * image_embedding_dim)
+        self.output_layer = Linear(2 * image_embedding_dim, 2)
 
-    def forward(x):
-        return torch.softmax(super(WordProbabilityModel, self).forward(x), dim=-1)
+    def forward(self, x):
+        return torch.softmax(x, dim = 1)
 
 class Agents:
     # class containing pair of agents:
@@ -61,7 +60,7 @@ class Agents:
         self.word_probs_model = WordProbabilityModel(self.image_embedding_dim)
         # self.sender_optimizer = Adam(self.sender.parameters(), lr=self.learning_rate)
         # self.receiver_optimizer = Adam(self.receiver.parameters(), lr=self.learning_rate)
-        w_init = torch.empty(32, 32).normal_(mean=0.0, std=0.01)
+        w_init = torch.empty(self.vocab_len, self.word_embedding_dim).normal_(mean=0.0, std=0.01)
         self.vocab_embedding = Variable(w_init)
         # self.vocab_embedding = Variable(w_init(shape=(self.vocab_len, self.word_embedding_dim), dtype='float32'), trainable=True)
 
@@ -69,19 +68,24 @@ class Agents:
    # function that returns the image chosen by the receiver agent and the
    # probability distribution for each word
     def get_receiver_selection(self, word, im1_acts, im2_acts):
-        word_embed_gather = tf.gather(self.vocab_embedding, self.word)
+        # slices the vocab embedding using the word as the indice
+        word_gathered = self.vocab_embedding[self.word]
         # strips any dimensions equal to 1
-        word_embed = tf.squeeze(word_embedding_gather)
+        word_embed = torch.squeeze(word_gathered)
         # embeds the images into game-specific spaces using the receiver
         im1_embed = self.receiver(im1_acts)
         im2_embed = self.receiver(im2_acts)
         # calculates the score for each image by multiplying the image embed
-        # by the word embedding
-        im1_score = tf.reduce_sum(tf.multiply(im1_embed, word_embed), axis=1).numpy()[0]
-        im2_score = tf.reduce_sum(tf.multiply(im2_embed, word_embed), axis=1).numpy()[0]
+        # by the word embedding, then summing along the columns
+        im1_mm = torch.mul(im1_embed, word_embed)
+        im1_score = torch.sum(im1_mm, dim=1).numpy()[0]
+
+        im2_mm = torch.mul(im2_embed, word_embed)
+        im2_score = torch.sum(im2_mm, dim=1).numpy()[0]
+
         # turns embeddings into probability distribution using the softmax
         # function
-        image_probs = tf.nn.softmax([im1_score, im2_score]).numpy()
+        image_probs = torch.softmax(torch.FloatTensor([im1_score, im2_score]), dim=0).numpy()
         # chooses
         selection = np.random.choice(np.arange(2), p=image_probs)
         # returns the probability distribution and chosen image
@@ -104,10 +108,10 @@ class Agents:
         # embeds the distractor into a game specific embedding space
         d_embed = self.sender(distractor_acts)
         # concatenates embeds into one dimension
-        ordered_embed = np.concatenate([t_embed, d_embed], axis=1)
-        print(ordered_embed)
+        ordered_embed = np.concatenate([t_embed, d_embed], axis=0)
+        ordered_embed_tensor = torch.from_numpy(ordered_embed)
         # obtains probability distribution for all words from word prob model
-        self.word_probs = self.word_probs_model.forward(ordered_embed).numpy()[0]
+        self.word_probs = self.word_probs_model.forward(ordered_embed_tensor).numpy()[0]
         # chooses a word to send by sampling from the probability distribution
         self.word = np.random.choice(np.arange(len(self.vocab)), p=self.word_probs)
         # returns the chosen word and the probability distribution
@@ -141,7 +145,7 @@ class Agents:
 
 if __name__=='__main__':
 
-    vocab = ['dog', 'cat', 'mouse']
+    vocab = ['dog', 'cat']
     agent = Agents(vocab=vocab, image_embedding_dim=10, word_embedding_dim=10,
                    learning_rate=0.2, temperature=10, batch_size=32)
     t_acts = torch.ones((1, 1000))

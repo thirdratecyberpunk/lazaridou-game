@@ -83,10 +83,6 @@ def run_game(config):
             # reshapes images into expected shape for VGG model
             target_image = target_image.reshape((1, 3, 224, 224))
             distractor_image = distractor_image.reshape((1, 3,224, 224))
-
-            # target_image = target_image.reshape((64, 3, 3, 3))
-            # distractor_image = distractor_image.reshape((64, 3, 3, 3))
-
             # sets the target class variable
             target_class = environ.target_class
             # vertically stacks numpy array of image
@@ -94,7 +90,6 @@ def run_game(config):
 
             # gets actual classifications from prediction of vgg model
             td_images_tensor = torch.from_numpy(td_images)
-            print(td_images_tensor.shape)
             td_acts = model(td_images_tensor)
             # reshapes predictions
             target_acts = td_acts[0].reshape((1, 1000))
@@ -118,6 +113,7 @@ def run_game(config):
             reward = 0.0
             if target == image_selected:
                 reward = 1.0
+            shuffled_acts = np.concatenate([im1_acts, im2_acts])
             # adds the game just played to the batch
             batch.append(Game(shuffled_acts, target_acts, distractor_acts,
             word_probs, receiver_probs, target, word_selected, image_selected,
@@ -128,7 +124,7 @@ def run_game(config):
                 print('updating the agent weights')
 
             print(target_class, reward)
-            tot_reward += reward
+            total_reward += reward
 
 def main():
 
