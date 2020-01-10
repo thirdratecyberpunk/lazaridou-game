@@ -73,7 +73,7 @@ def run_game(config):
     "word_probs", "image_probs", "target", "word", "selection", "reward"])
 
     total_reward = 0
-
+    successes = 0
     with torch.no_grad():
         for i in range(iterations):
             print("Round {}/{}".format(i, iterations), end = "\n")
@@ -113,6 +113,7 @@ def run_game(config):
             reward = 0.0
             if target == image_selected:
                 reward = 1.0
+                successes += 1
             shuffled_acts = np.concatenate([im1_acts, im2_acts])
             # adds the game just played to the batch
             batch.append(Game(shuffled_acts, target_acts, distractor_acts,
@@ -122,8 +123,10 @@ def run_game(config):
             #TODO: implement weight updates
             if (i+1) % mini_batch_size == 0:
                 print('updating the agent weights')
+                accuracy = successes / i * 100
+                print('Accuracy : {}%'.format(accuracy))
 
-            print(target_class, reward)
+            print('Target {}, chosen {}, reward {}'.format(target, image_selected, reward))
             total_reward += reward
 
 def main():
@@ -133,7 +136,6 @@ def main():
     args = parser.parse_args()
     conf = args.conf
 
-    # TODO: fix the warning that comes up when loading with default load
     with open(conf) as g:
         config = yaml.load(g, Loader=yaml.FullLoader)
 
