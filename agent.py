@@ -89,7 +89,7 @@ class Agents:
         # chooses
         selection = np.random.choice(np.arange(2), p=image_probs)
         # returns the probability distribution and chosen image
-        return image_probs, selection
+        return image_probs, selection, image_probs[selection]
 
     # builds the linear sigmoid architecture for senders/receivers
     # TODO: implement informed/agnostic architectures
@@ -114,13 +114,40 @@ class Agents:
         self.word_probs = self.word_probs_model.forward(ordered_embed_tensor).numpy()[0]
         # chooses a word to send by sampling from the probability distribution
         self.word = np.random.choice(np.arange(len(self.vocab)), p=self.word_probs)
-        # returns the chosen word and the probability distribution
-        return self.word_probs, self.word
+        # returns the chosen word, the probability distribution and the
+        # probability of choosing that word
+        return self.word_probs, self.word, self.word_probs[self.word]
 
     #TODO: is this handled here in a PyTorch workflow?
     def update(self, batch):
-        acts, target_acts, distractor_acts, word_probs, \
-            receiver_probs, target, word, selection, reward = map(lambda x: np.squeeze(np.array(x)), zip(*batch))
+        # obtains these variables from every game in the Batch
+        # ACTS is more than 1d
+        # i = 0
+        # for x in zip(*batch):
+        #     print(x)
+        #     newX = np.array(x)
+        #     newX = np.squeeze(newX)
+        #     print("handled {}".format(i))
+        #     i += 1
+        #     print("______________________________________________________")
+        #
+        # acts, target_acts, distractor_acts, word_probs, \
+        #     receiver_probs, target, word, selection, reward = map(lambda x: np.squeeze(x.numpy()), zip(*batch))
+
+        zip_batch = list(zip(*batch))
+        # TODO: tidy this up
+        acts = np.squeeze(np.array(zip_batch[0]))
+        target_acts = np.squeeze(np.array(torch.stack(zip_batch[1])))
+        distractor_acts = np.squeeze(np.array(torch.stack(zip_batch[2])))
+        word_probs = np.squeeze(np.array(zip_batch[3]))
+        receiver_probs = np.squeeze(np.array(zip_batch[4]))
+        target = np.squeeze(np.array(zip_batch[5]))
+        word = np.squeeze(np.array(zip_batch[6]))
+        selection = np.squeeze(np.array(zip_batch[7]))
+        reward = np.squeeze(np.array(zip_batch[8]))
+        selected_word_prob = np.squeeze(np.array(zip_batch[9]))
+        selected_image_prob = np.squeeze(np.array(zip_batch[10]))
+
         # normalises variables
         reward = np.reshape(reward, [-1, 1])
         selection = np.reshape(selection, [1, -1])
@@ -131,7 +158,7 @@ class Agents:
         receiver_probs = np.reshape(receiver_probs, [-1, 2])
         # calculates loss for sender/receiver
         sender_loss = np.mean(-1 * np.multiply(np.transpose(np.log(selected_word_prob)), reward))
-        receiver_loss = np.mean(-1 * np.log(selected_image_prob) * self.reward)
+        receiver_loss = np.mean(-1 * np.log(selected_image_prob) * reward)
         # updates gradients for optimiser based on loss (gradient descent)
         # TODO: move gradient descent into Game loop
 

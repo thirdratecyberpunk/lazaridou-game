@@ -70,7 +70,7 @@ def run_game(config):
     batch = []
     # mathematical definition of game as explained by Lazaridou
     Game = namedtuple("Game", ["im_acts", "target_acts", "distractor_acts",
-    "word_probs", "image_probs", "target", "word", "selection", "reward"])
+    "word_probs", "image_probs", "target", "word", "selection", "reward", "selected_word_prob", "selected_image_prob"])
 
     total_reward = 0
     successes = 0
@@ -95,8 +95,10 @@ def run_game(config):
             target_acts = td_acts[0].reshape((1, 1000))
             distractor_acts = td_acts[1].reshape((1, 1000))
             # gets the sender's chosen word and the associated probability
-            word_probs, word_selected = agents.get_sender_word_probs(
+            word_probs, word_selected, selected_word_prob = agents.get_sender_word_probs(
             target_acts, distractor_acts)
+            print("Sender sent {} for image {}".format(vocab[word_selected],
+            target_class))
             # gets the target image
             # TODO: check if this can be modified for more than 2 images
             reordering = np.array([0,1])
@@ -107,26 +109,26 @@ def run_game(config):
             im1_acts, im2_acts = [img_array[reordering[i]]
             for i, img in enumerate(img_array)]
             # gets the receiver's chosen target and associated probability
-            receiver_probs, image_selected = agents.get_receiver_selection(
+            receiver_probs, image_selected, selected_image_prob = agents.get_receiver_selection(
             word_selected, im1_acts, im2_acts)
+            print("Receiver chose image {}, target was image {}".format(image_selected, target))
             # gives a payoff if the target is the same as the selected image
             reward = 0.0
             if target == image_selected:
                 reward = 1.0
                 successes += 1
+                print("Success! Payoff of {}".format(reward))
             shuffled_acts = np.concatenate([im1_acts, im2_acts])
             # adds the game just played to the batch
             batch.append(Game(shuffled_acts, target_acts, distractor_acts,
             word_probs, receiver_probs, target, word_selected, image_selected,
-            reward))
-
+            reward, selected_word_prob, selected_image_prob))
             #TODO: implement weight updates
             if (i+1) % mini_batch_size == 0:
-                print('updating the agent weights')
-                accuracy = successes / i * 100
-                print('Accuracy : {}%'.format(accuracy))
-
-            print('Target {}, chosen {}, reward {}'.format(target, image_selected, reward))
+                accuracy = successes / (i + 1) * 100
+                print('Total accuracy : {}%'.format(accuracy))
+                print('Updating the agent weights')
+                agents.update(batch)
             total_reward += reward
 
 def main():
