@@ -8,18 +8,27 @@ from torch.nn import Sigmoid, Module, Linear
 import torch.nn.init as Init
 from torch.autograd import Variable
 
+class LossPolicy(Module):
+    def __init__(self):
+        super(LossPolicy,self).__init__()
+
+    def forward(self, selected_word_prob ,reward):
+        result = np.mean(-1 * np.multiply(np.transpose(np.log(selected_word_prob)), reward))
+        return torch.tensor(result, requires_grad = True)
+
 class LinearSigmoid(Module):
   def __init__(self, input_dim=32, h_units=32):
       super(LinearSigmoid, self).__init__()
       # sets the initial weights as values from a normal distribution
       w_init = torch.empty(input_dim, h_units).normal_(mean=0.0, std=0.01)
       # defines weights as a new tensor
-      self.w = Variable(torch.empty(input_dim, h_units)
-      .normal_(mean=0.0, std=0.01), requires_grad=False)
+      self.w = torch.nn.Parameter(torch.empty(input_dim, h_units)
+      .normal_(mean=0.0, std=0.01), requires_grad=True)
+
       # sets the biases to contain zeroes
       b_init = torch.zeros(h_units)
       # defines biases as a new tensor
-      self.b = Variable(torch.zeros(h_units), requires_grad=False)
+      self.b = torch.nn.Parameter(torch.zeros(h_units), requires_grad=True)
       # defines sigmoid function
       self.sig = Sigmoid()
 
@@ -58,11 +67,13 @@ class Agents:
         # TODO: move models to device
         self.build_sender_receiver_model()
         self.word_probs_model = WordProbabilityModel(self.image_embedding_dim)
-        # self.sender_optimizer = Adam(self.sender.parameters(), lr=self.learning_rate)
-        # self.receiver_optimizer = Adam(self.receiver.parameters(), lr=self.learning_rate)
+        self.sender_optimizer = Adam(self.sender.parameters(), lr=self.learning_rate)
+        self.receiver_optimizer = Adam(self.receiver.parameters(), lr=self.learning_rate)
         w_init = torch.empty(self.vocab_len, self.word_embedding_dim).normal_(mean=0.0, std=0.01)
         self.vocab_embedding = Variable(w_init)
         # self.vocab_embedding = Variable(w_init(shape=(self.vocab_len, self.word_embedding_dim), dtype='float32'), trainable=True)
+        self.loss = LossPolicy()
+
 
    # TODO: move this logic into a receiver agent class
    # function that returns the image chosen by the receiver agent and the
@@ -122,16 +133,9 @@ class Agents:
     def update(self, batch):
         # obtains these variables from every game in the Batch
         # ACTS is more than 1d
-        # i = 0
-        # for x in zip(*batch):
-        #     print(x)
-        #     newX = np.array(x)
-        #     newX = np.squeeze(newX)
-        #     print("handled {}".format(i))
-        #     i += 1
-        #     print("______________________________________________________")
-        #
-        # acts, target_acts, distractor_acts, word_probs, \
+        # acts, target_acts, distractor_
+        #sender_loss = np.mean(-1 * np.multiply(np.transpose(np.log(selected_word_prob)), reward))
+        #receiver_loss = np.mean(-1 * np.log(selected_image_prob) * reward)acts, word_probs, \
         #     receiver_probs, target, word, selection, reward = map(lambda x: np.squeeze(x.numpy()), zip(*batch))
 
         zip_batch = list(zip(*batch))
@@ -157,11 +161,18 @@ class Agents:
         acts = np.reshape(acts, [-1, 2000])
         receiver_probs = np.reshape(receiver_probs, [-1, 2])
         # calculates loss for sender/receiver
-        sender_loss = np.mean(-1 * np.multiply(np.transpose(np.log(selected_word_prob)), reward))
-        receiver_loss = np.mean(-1 * np.log(selected_image_prob) * reward)
+        # sender_loss = np.mean(-1 * np.multiply(np.transpose(np.log(selected_word_prob)), reward))
+        # receiver_loss = np.mean(-1 * np.log(selected_image_prob) * reward)
+        # sender_loss.backward()
+        # receiver_loss.backward()
+        agent_loss = self.loss(selected_word_prob, reward)
+        agent_loss.backward()
         # updates gradients for optimiser based on loss (gradient descent)
-        # TODO: move gradient descent into Game loop
-
+        print("Loss {}".format(agent_loss))
+        self.sender_optimizer.zero_grad()
+        self.receiver_optimizer.zero_grad()
+        self.sender_optimizer.step()
+        self.receiver_optimizer.step()
         # with tf.GradientTape() as tape:
         #     sender_gradients = tape.gradients(sender_loss, self.sender.trainable_variables)
         #     self.sender_optimizer.apply_gradients(sender_gradients, self.sender.trainable_variables)

@@ -79,7 +79,6 @@ def run_game(config):
             print("Round {}/{}".format(i, iterations), end = "\n")
             # gets a new target/distractor pair from the environment
             target_image, distractor_image = environ.get_images()
-            # TODO: check if this is needed
             # reshapes images into expected shape for VGG model
             target_image = target_image.reshape((1, 3, 224, 224))
             distractor_image = distractor_image.reshape((1, 3,224, 224))
@@ -87,7 +86,6 @@ def run_game(config):
             target_class = environ.target_class
             # vertically stacks numpy array of image
             td_images = np.vstack([target_image, distractor_image])
-
             # gets actual classifications from prediction of vgg model
             td_images_tensor = torch.from_numpy(td_images)
             td_acts = model(td_images_tensor)

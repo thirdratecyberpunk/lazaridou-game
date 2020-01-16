@@ -95,5 +95,3 @@ class Environment:
         self.distractor = None
         self.word = None
         self.target_class = None
-
-#load_image("data/images/cat/0.jpg")
