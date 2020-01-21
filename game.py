@@ -130,6 +130,7 @@ def run_game(config):
             total_reward += reward
 
 def main():
+
     parser = argparse.ArgumentParser(description="Train agents to converge upon a language via a referential game.")
     parser.add_argument('--seed', type = int, default = 0, help="Value used as the seed for random generators")
     parser.add_argument('--conf', required=True, help="Location of configuration file for game.")

@@ -47,6 +47,9 @@ class WordProbabilityModel():
         self.output_layer = Linear(2 * image_embedding_dim, 2)
 
     def forward(self, x):
+        # passes the input through the linear layers
+        x = self.hidden_layer(x)
+        x = self.output_layer(x)
         return torch.softmax(x, dim = 1)
 
 class Agents:
@@ -165,10 +168,18 @@ class Agents:
         # receiver_loss = np.mean(-1 * np.log(selected_image_prob) * reward)
         # sender_loss.backward()
         # receiver_loss.backward()
-        agent_loss = self.loss(selected_word_prob, reward)
-        agent_loss.backward()
-        # updates gradients for optimiser based on loss (gradient descent)
-        print("Loss {}".format(agent_loss))
+
+        receiver_loss = torch.mean(torch.tensor(-1 * np.log(selected_image_prob) * reward, requires_grad = True))
+        sender_loss = torch.mean(torch.tensor(-1 * np.multiply(np.transpose(np.log(selected_word_prob)), reward), requires_grad = True))
+        print("sender_loss : {}".format(sender_loss))
+        print("receiver_loss : {}".format(receiver_loss))
+        # receiver_loss.backward(retain_graph = True)
+        # sender_loss.backward(retain_graph = True)
+
+        # agent_loss = self.loss(selected_word_prob, reward)
+        # agent_loss.backward()
+        # # updates gradients for optimiser based on loss (gradient descent)
+        # print("Loss {}".format(agent_loss))
         self.sender_optimizer.zero_grad()
         self.receiver_optimizer.zero_grad()
         self.sender_optimizer.step()
