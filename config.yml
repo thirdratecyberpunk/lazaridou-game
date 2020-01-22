@@ -13,8 +13,8 @@ log_path: logs
 
 data_dir: data
 image_dirs:
-    - dog
     - cat
+    - dog
 vocab:
-    - dogword
     - catword
+    - dogword
