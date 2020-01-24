@@ -65,7 +65,7 @@ def run_game(config):
     losses = 0
 
     # loads the pretrained VGG16 model
-    model = models.vgg16()
+    model = models.vgg16(pretrained=True)
     # creates a batch to store all game rounds
     batch = []
     # mathematical definition of game as explained by Lazaridou

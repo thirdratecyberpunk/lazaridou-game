@@ -7,6 +7,7 @@ from torch.optim import Adam
 from torch.nn import Sigmoid, Module, Linear
 import torch.nn.init as Init
 from torch.autograd import Variable
+from torch.nn import CrossEntropyLoss, NLLLoss
 
 class LossPolicy(Module):
     def __init__(self):
@@ -14,7 +15,8 @@ class LossPolicy(Module):
 
     def forward(self, selected_word_prob ,reward):
         result = np.mean(-1 * np.multiply(np.transpose(np.log(selected_word_prob)), reward))
-        return torch.tensor(result, requires_grad = True)
+        res_tensor = torch.tensor(result, requires_grad = True)
+        return res_tensor
 
 class LinearSigmoid(Module):
   def __init__(self, input_dim=32, h_units=32):
@@ -73,7 +75,7 @@ class Agents:
         self.sender_optimizer = Adam(self.sender.parameters(), lr=self.learning_rate)
         self.receiver_optimizer = Adam(self.receiver.parameters(), lr=self.learning_rate)
         w_init = torch.empty(self.vocab_len, self.word_embedding_dim).normal_(mean=0.0, std=0.01)
-        self.vocab_embedding = Variable(w_init)
+        self.vocab_embedding = Variable(w_init, requires_grad = True)
         # self.vocab_embedding = Variable(w_init(shape=(self.vocab_len, self.word_embedding_dim), dtype='float32'), trainable=True)
         self.loss = LossPolicy()
 
@@ -155,6 +157,8 @@ class Agents:
         selected_word_prob = np.squeeze(np.array(zip_batch[9]))
         selected_image_prob = np.squeeze(np.array(zip_batch[10]))
 
+        # mean_word_probs = np.mean(word_probs).squeeze()
+
         # normalises variables
         reward = np.reshape(reward, [-1, 1])
         selection = np.reshape(selection, [1, -1])
@@ -163,34 +167,52 @@ class Agents:
         distractor_acts = np.reshape(distractor_acts, [-1, 1000])
         acts = np.reshape(acts, [-1, 2000])
         receiver_probs = np.reshape(receiver_probs, [-1, 2])
+        word_probs = np.reshape(word_probs, [-1, 2])
+
+        # turns a collection of probability distributions for a word
+        # i.e. [[0.9,0.1], [0.7,0.3]]
+        # into a single average probability distribution
+        # i.e. [0.8,0.2]
+        word_probs_tensor = torch.tensor(prob_range_to_average_distribution(word_probs))
+        word_tensor = torch.tensor(word)
+
+        self.sender.train()
+        self.receiver.train()
+
         # calculates loss for sender/receiver
-        # sender_loss = np.mean(-1 * np.multiply(np.transpose(np.log(selected_word_prob)), reward))
-        # receiver_loss = np.mean(-1 * np.log(selected_image_prob) * reward)
-        # sender_loss.backward()
-        # receiver_loss.backward()
+        # not sure about the cross entropy loss here?
+        # sender_loss_policy = CrossEntropyLoss()
+        # sender_loss = sender_loss_policy(input=word_probs_tensor,target=word_tensor)
+        # sender_loss.backwards()
+        sender_loss = torch.tensor(-1 * np.mean(np.multiply(prob_range_to_average_distribution(word_probs), reward)), requires_grad=True)
+        sender_loss.backward()
 
-        receiver_loss = torch.mean(torch.tensor(-1 * np.log(selected_image_prob) * reward, requires_grad = True))
-        sender_loss = torch.mean(torch.tensor(-1 * np.multiply(np.transpose(np.log(selected_word_prob)), reward), requires_grad = True))
-        print("sender_loss : {}".format(sender_loss))
-        print("receiver_loss : {}".format(receiver_loss))
-        # receiver_loss.backward(retain_graph = True)
-        # sender_loss.backward(retain_graph = True)
+        # receiver_loss_policy = CrossEntropyLoss()
+        receiver_loss_policy = NLLLoss()
+        selection_list = selection.tolist()[0]
+        receiver_probs_tensor = torch.tensor(np.log(receiver_probs), requires_grad = True)
+        selection_tensor = torch.tensor(selection_list)
+        receiver_loss = torch.tensor(receiver_loss_policy(input=receiver_probs_tensor, target=selection_tensor), requires_grad=True)
+        receiver_loss.backward()
 
-        # agent_loss = self.loss(selected_word_prob, reward)
-        # agent_loss.backward()
-        # # updates gradients for optimiser based on loss (gradient descent)
-        # print("Loss {}".format(agent_loss))
-        self.sender_optimizer.zero_grad()
-        self.receiver_optimizer.zero_grad()
+        print("Receiver loss: {}".format(receiver_loss))
+
+        # self.sender_optimizer.zero_grad()
+        # self.receiver_optimizer.zero_grad()
         self.sender_optimizer.step()
         self.receiver_optimizer.step()
-        # with tf.GradientTape() as tape:
-        #     sender_gradients = tape.gradients(sender_loss, self.sender.trainable_variables)
-        #     self.sender_optimizer.apply_gradients(sender_gradients, self.sender.trainable_variables)
-        #
-        #     receiver_gradients = tape.gradients(receiver_loss, self.receiver.trainable_variables)
-        #     self.receiver_optimizer.apply_gradients(receiver_gradients, self.receiver.trainable_variables)
 
+        self.sender.eval()
+        self.receiver.eval()
+
+def prob_range_to_average_distribution(prob_range):
+    """
+    turns a collection of probability distributions for a word
+    i.e. [[0.9,0.1], [0.7,0.3]]
+    into a single average log probability distribution
+    i.e. [0.8,0.2]
+    """
+    return np.mean(np.transpose(np.log(prob_range)), axis=1)
 
 if __name__=='__main__':
 
