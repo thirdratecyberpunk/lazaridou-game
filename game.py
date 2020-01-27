@@ -67,11 +67,11 @@ def run_game(config):
     # loads the pretrained VGG16 model
     model = models.vgg16(pretrained=True)
     # creates a batch to store all game rounds
-    batch = []
     # mathematical definition of game as explained by Lazaridou
     Game = namedtuple("Game", ["im_acts", "target_acts", "distractor_acts",
     "word_probs", "image_probs", "target", "word", "selection", "reward", "selected_word_prob", "selected_image_prob"])
 
+    batch = []
     total_reward = 0
     successes = 0
     with torch.no_grad():
@@ -121,12 +121,14 @@ def run_game(config):
             batch.append(Game(shuffled_acts, target_acts, distractor_acts,
             word_probs, receiver_probs, target, word_selected, image_selected,
             reward, selected_word_prob, selected_image_prob))
-            #TODO: implement weight updates
+            # update the weights after the batch update
             if (i+1) % mini_batch_size == 0:
                 accuracy = successes / (i + 1) * 100
                 print('Total accuracy : {}%'.format(accuracy))
                 print('Updating the agent weights')
                 agents.update(batch)
+                # reset the batch after one update
+                batch = []
             total_reward += reward
 
 def main():

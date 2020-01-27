@@ -9,6 +9,7 @@ import torch.nn.init as Init
 from torch.autograd import Variable
 from torch.nn import CrossEntropyLoss, NLLLoss
 from AgnosticSender import AgnosticSender
+from Receiver import Receiver
 
 class LossPolicy(Module):
     def __init__(self):
@@ -18,30 +19,6 @@ class LossPolicy(Module):
         result = np.mean(-1 * np.multiply(np.transpose(np.log(selected_word_prob)), reward))
         res_tensor = torch.tensor(result, requires_grad = True)
         return res_tensor
-
-class LinearSigmoid(Module):
-  def __init__(self, input_dim=32, h_units=32):
-      super(LinearSigmoid, self).__init__()
-      # sets the initial weights as values from a normal distribution
-      w_init = torch.empty(input_dim, h_units).normal_(mean=0.0, std=0.01)
-      # defines weights as a new tensor
-      self.w = torch.nn.Parameter(torch.empty(input_dim, h_units)
-      .normal_(mean=0.0, std=0.01), requires_grad=True)
-
-      # sets the biases to contain zeroes
-      b_init = torch.zeros(h_units)
-      # defines biases as a new tensor
-      self.b = torch.nn.Parameter(torch.zeros(h_units), requires_grad=True)
-      # defines sigmoid function
-      self.sig = Sigmoid()
-
-  def forward(self, inputs):
-      # returns the result of a Sigmoid function provided the inputs, weights
-      # and the biases
-      input = torch.mm(inputs, self.w).add(self.b)
-      result = self.sig(input)
-      print (result)
-      return result
 
 # class representing the model that generates probabilities for each word
 class WordProbabilityModel():
@@ -73,7 +50,7 @@ class Agents:
         self.learning_rate = learning_rate
         self.vocab_len = len(self.vocab)
         # TODO: move models to device
-        self.sender = AgnosticSender(1000, self.image_embedding_dim)
+        self.sender = AgnosticSender(vocab = self.vocab, input_dim = 1000, h_units=self.image_embedding_dim, image_embedding_dim=self.image_embedding_dim)
         self.receiver = Receiver(1000, self.image_embedding_dim)
         self.word_probs_model = WordProbabilityModel(self.image_embedding_dim)
         self.sender_optimizer = Adam(self.sender.parameters(), lr=self.learning_rate)
@@ -82,15 +59,6 @@ class Agents:
         self.vocab_embedding = Variable(w_init, requires_grad = True)
         # self.vocab_embedding = Variable(w_init(shape=(self.vocab_len, self.word_embedding_dim), dtype='float32'), trainable=True)
         self.loss = LossPolicy()
-
-
-    # builds the linear sigmoid architecture for senders/receivers
-    # TODO: implement informed/agnostic architectures
-    # TODO: implement sender/receiver as their own classes rather than have
-    # an Agents class
-    def build_sender_receiver_model(self):
-        self.sender = LinearSigmoid(1000, self.image_embedding_dim)
-        self.receiver = LinearSigmoid(1000, self.image_embedding_dim)
 
    # TODO: move this logic into a receiver agent class
    # function that returns the image chosen by the receiver agent and the
@@ -124,32 +92,12 @@ class Agents:
     # function that returns the word chosen by the sender and the probability
     # distribution
     def get_sender_word_probs(self, target_acts, distractor_acts):
-        # embeds the target into a game specific embedding space
-        t_embed = self.sender(target_acts)
-        # embeds the distractor into a game specific embedding space
-        d_embed = self.sender(distractor_acts)
-        # concatenates embeds into one dimension
-        ordered_embed = np.concatenate([t_embed, d_embed], axis=0)
-        ordered_embed_tensor = torch.from_numpy(ordered_embed)
-        # obtains probability distribution for all words from word prob model
-        self.word_probs = self.word_probs_model.forward(ordered_embed_tensor).numpy()[0]
-        # chooses a word to send by sampling from the probability distribution
-        self.word = np.random.choice(np.arange(len(self.vocab)), p=self.word_probs)
-        # returns the chosen word, the probability distribution and the
-        # probability of choosing that word
-        return self.word_probs, self.word, self.word_probs[self.word]
+        return self.sender.forward(target_acts, distractor_acts)
 
     #TODO: is this handled here in a PyTorch workflow?
     def update(self, batch):
         # obtains these variables from every game in the Batch
-        # ACTS is more than 1d
-        # acts, target_acts, distractor_
-        #sender_loss = np.mean(-1 * np.multiply(np.transpose(np.log(selected_word_prob)), reward))
-        #receiver_loss = np.mean(-1 * np.log(selected_image_prob) * reward)acts, word_probs, \
-        #     receiver_probs, target, word, selection, reward = map(lambda x: np.squeeze(x.numpy()), zip(*batch))
-
         zip_batch = list(zip(*batch))
-        # TODO: tidy this up
         acts = np.squeeze(np.array(zip_batch[0]))
         target_acts = np.squeeze(np.array(torch.stack(zip_batch[1])))
         distractor_acts = np.squeeze(np.array(torch.stack(zip_batch[2])))
