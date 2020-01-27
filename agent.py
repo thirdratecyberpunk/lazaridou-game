@@ -8,6 +8,7 @@ from torch.nn import Sigmoid, Module, Linear
 import torch.nn.init as Init
 from torch.autograd import Variable
 from torch.nn import CrossEntropyLoss, NLLLoss
+from AgnosticSender import AgnosticSender
 
 class LossPolicy(Module):
     def __init__(self):
@@ -38,7 +39,9 @@ class LinearSigmoid(Module):
       # returns the result of a Sigmoid function provided the inputs, weights
       # and the biases
       input = torch.mm(inputs, self.w).add(self.b)
-      return self.sig(input)
+      result = self.sig(input)
+      print (result)
+      return result
 
 # class representing the model that generates probabilities for each word
 class WordProbabilityModel():
@@ -70,7 +73,8 @@ class Agents:
         self.learning_rate = learning_rate
         self.vocab_len = len(self.vocab)
         # TODO: move models to device
-        self.build_sender_receiver_model()
+        self.sender = AgnosticSender(1000, self.image_embedding_dim)
+        self.receiver = Receiver(1000, self.image_embedding_dim)
         self.word_probs_model = WordProbabilityModel(self.image_embedding_dim)
         self.sender_optimizer = Adam(self.sender.parameters(), lr=self.learning_rate)
         self.receiver_optimizer = Adam(self.receiver.parameters(), lr=self.learning_rate)
@@ -79,6 +83,14 @@ class Agents:
         # self.vocab_embedding = Variable(w_init(shape=(self.vocab_len, self.word_embedding_dim), dtype='float32'), trainable=True)
         self.loss = LossPolicy()
 
+
+    # builds the linear sigmoid architecture for senders/receivers
+    # TODO: implement informed/agnostic architectures
+    # TODO: implement sender/receiver as their own classes rather than have
+    # an Agents class
+    def build_sender_receiver_model(self):
+        self.sender = LinearSigmoid(1000, self.image_embedding_dim)
+        self.receiver = LinearSigmoid(1000, self.image_embedding_dim)
 
    # TODO: move this logic into a receiver agent class
    # function that returns the image chosen by the receiver agent and the
@@ -107,13 +119,6 @@ class Agents:
         # returns the probability distribution and chosen image
         return image_probs, selection, image_probs[selection]
 
-    # builds the linear sigmoid architecture for senders/receivers
-    # TODO: implement informed/agnostic architectures
-    # TODO: implement sender/receiver as their own classes rather than have
-    # an Agents class
-    def build_sender_receiver_model(self):
-        self.sender = LinearSigmoid(1000, self.image_embedding_dim)
-        self.receiver = LinearSigmoid(1000, self.image_embedding_dim)
 
     # TODO: move this logic into a sender agent class
     # function that returns the word chosen by the sender and the probability
@@ -194,8 +199,6 @@ class Agents:
         selection_tensor = torch.tensor(selection_list)
         receiver_loss = torch.tensor(receiver_loss_policy(input=receiver_probs_tensor, target=selection_tensor), requires_grad=True)
         receiver_loss.backward()
-
-        print("Receiver loss: {}".format(receiver_loss))
 
         # self.sender_optimizer.zero_grad()
         # self.receiver_optimizer.zero_grad()

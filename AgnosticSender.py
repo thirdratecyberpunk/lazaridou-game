@@ -1,3 +1,13 @@
+import os
+import sys
+import numpy as np
+import torch
+from torch.optim import Adam
+from torch.nn import Sigmoid, Module, Linear
+import torch.nn.init as Init
+from torch.autograd import Variable
+from torch.nn import CrossEntropyLoss, NLLLoss
+
 # agent that takes in the target, any distractors and the vocabulary
 # and sends a single word from the vocabulary
 class AgnosticSender(Module):
