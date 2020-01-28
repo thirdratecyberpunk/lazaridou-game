@@ -3,7 +3,7 @@ import sys
 import numpy as np
 import torch
 from torch.optim import Adam
-from torch.nn import Sigmoid, Module, Linear
+from torch.nn import Sigmoid, Module, Linear, Sequential
 import torch.nn.init as Init
 from torch.autograd import Variable
 from torch.nn import CrossEntropyLoss, NLLLoss
@@ -13,13 +13,14 @@ class WordProbabilityModel():
     def __init__(self, image_embedding_dim):
         super(WordProbabilityModel, self).__init__()
         # dense network implementation
-        self.hidden_layer = Linear(2, 2 * image_embedding_dim)
-        self.output_layer = Linear(2 * image_embedding_dim, 2)
+        self.s = Sequential(
+            Linear(2, 2 * image_embedding_dim),
+            Linear(2 * image_embedding_dim, 2)
+        )
 
     def forward(self, x):
         # passes the input through the linear layers
-        x = self.hidden_layer(x)
-        x = self.output_layer(x)
+        x = self.s(x)
         return torch.softmax(x, dim = 1)
 
 # agent that takes in the target, any distractors and the vocabulary
@@ -28,7 +29,6 @@ class AgnosticSender(Module):
   # def __init__(self, image_embedding_dim, input_dim=32, h_units=32):
   def __init__(self, vocab, input_dim=32, h_units=32, image_embedding_dim=2):
       super(AgnosticSender, self).__init__()
-      print(input_dim, h_units)
       self.vocab = vocab
       # has a single layer to embed the images
       self.linear1 = Linear(input_dim, h_units, bias=None)

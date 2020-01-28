@@ -2,7 +2,8 @@
 import sys
 import os
 import numpy as np
-from agent import Agents
+from AgnosticSender import AgnosticSender
+from Receiver import Receiver
 import env
 import random
 import torch
@@ -11,7 +12,9 @@ import argparse
 import yaml
 import torchvision.models as models
 from collections import deque, namedtuple
-
+from torch.optim import Adam
+from torch.autograd import Variable
+from LossPolicy import LossPolicy
 
 def shuffle_image_activations(im_acts):
     reordering = np.array(range(len(im_acts)))
@@ -45,16 +48,21 @@ def run_game(config):
     temperature = config['temperature']
     # whether the model should be loaded from a pretrained model
     load_model = config['load_model'] == 'True'
+    # number of words in the vocabulary
+    vocab_len = len(vocab)
+    # creates sender/receiver agents which are used to populate the game
 
-    # creates a pair of sender/receiver agents which are used to populate the
-    # game TODO: replace this with a separate sender/receiver class to experiment
-    # with different population numbers
-    agents = Agents(vocab,
-                    image_embedding_dim,
-                    word_embedding_dim,
-                    learning_rate,
-                    temperature,
-                    batch_size)
+    sender = AgnosticSender(vocab = vocab, input_dim = 1000, h_units= image_embedding_dim, image_embedding_dim= image_embedding_dim)
+    receiver = Receiver(1000, image_embedding_dim)
+    # define the loss policy for
+    sender_loss = LossPolicy()
+    receiver_loss = LossPolicy()
+
+    sender_optimizer = Adam(sender.parameters(), lr=learning_rate)
+    receiver_optimizer = Adam(receiver.parameters(), lr=learning_rate)
+
+    w_init = torch.empty(vocab_len, word_embedding_dim).normal_(mean=0.0, std=0.01)
+    vocab_embedding = Variable(w_init, requires_grad = True)
 
     # creates a referential game environment
     # TODO: modify the environment so it can take more classes/distractors
@@ -78,8 +86,8 @@ def run_game(config):
     with torch.no_grad():
         for i in range(iterations):
 
-            agents.sender.train()
-            agents.receiver.train()
+            sender.train()
+            receiver.train()
 
             print("Round {}/{}".format(i, iterations), end = "\n")
             # gets a new target/distractor pair from the environment
@@ -98,7 +106,7 @@ def run_game(config):
             target_acts = td_acts[0].reshape((1, 1000))
             distractor_acts = td_acts[1].reshape((1, 1000))
             # gets the sender's chosen word and the associated probability
-            word_probs, word_selected, selected_word_prob = agents.get_sender_word_probs(
+            word_probs, word_selected, selected_word_prob = sender.forward(
             target_acts, distractor_acts)
             print("Sender sent {} with a chance of {} for image {}".format(vocab[word_selected],
             selected_word_prob,target_class))
@@ -112,8 +120,8 @@ def run_game(config):
             im1_acts, im2_acts = [img_array[reordering[i]]
             for i, img in enumerate(img_array)]
             # gets the receiver's chosen target and associated probability
-            receiver_probs, image_selected, selected_image_prob = agents.get_receiver_selection(
-            word_selected, im1_acts, im2_acts)
+            receiver_probs, image_selected, selected_image_prob = receiver.forward(
+            im1_acts, im2_acts, vocab_embedding, word_selected)
             print("Receiver chose image {} with a chance of {}, target was image {}".format(image_selected, selected_image_prob, target))
             # gives a payoff if the target is the same as the selected image
             reward = 0.0
@@ -140,9 +148,22 @@ def run_game(config):
             accuracy = successes / (i + 1) * 100
             print('Total accuracy : {}%'.format(accuracy))
             print('Updating the agent weights')
-            agents.update(Game(shuffled_acts, target_acts, distractor_acts,
-            word_probs, receiver_probs, target, word_selected, image_selected,
-            reward, selected_word_prob, selected_image_prob))
+            # agents.update(Game(shuffled_acts, target_acts, distractor_acts,
+            # word_probs, receiver_probs, target, word_selected, image_selected,
+            # reward, selected_word_prob, selected_image_prob))
+            sender_optimizer.zero_grad()
+            receiver_optimizer.zero_grad()
+
+            # calculates loss for agents
+            sender_loss_value = sender_loss(selected_word_prob, reward)
+            sender_loss_value.backward()
+
+            receiver_loss_value = receiver_loss(selected_image_prob, reward)
+            receiver_loss_value.backward()
+
+            # applies gradient descent backwards
+            sender_optimizer.step()
+            receiver_optimizer.step()
 
 def main():
 
