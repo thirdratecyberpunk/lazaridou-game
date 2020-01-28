@@ -75,11 +75,12 @@ def run_game(config):
     total_reward = 0
     successes = 0
 
-    # for n in agents.sender.named_parameters():
-    #     print(n)
-
     with torch.no_grad():
         for i in range(iterations):
+
+            agents.sender.train()
+            agents.receiver.train()
+
             print("Round {}/{}".format(i, iterations), end = "\n")
             # gets a new target/distractor pair from the environment
             target_image, distractor_image = environ.get_images()
@@ -99,8 +100,8 @@ def run_game(config):
             # gets the sender's chosen word and the associated probability
             word_probs, word_selected, selected_word_prob = agents.get_sender_word_probs(
             target_acts, distractor_acts)
-            print("Sender sent {} for image {}".format(vocab[word_selected],
-            target_class))
+            print("Sender sent {} with a chance of {} for image {}".format(vocab[word_selected],
+            selected_word_prob,target_class))
             # gets the target image
             # TODO: check if this can be modified for more than 2 images
             reordering = np.array([0,1])
@@ -113,7 +114,7 @@ def run_game(config):
             # gets the receiver's chosen target and associated probability
             receiver_probs, image_selected, selected_image_prob = agents.get_receiver_selection(
             word_selected, im1_acts, im2_acts)
-            print("Receiver chose image {}, target was image {}".format(image_selected, target))
+            print("Receiver chose image {} with a chance of {}, target was image {}".format(image_selected, selected_image_prob, target))
             # gives a payoff if the target is the same as the selected image
             reward = 0.0
             if target == image_selected:
@@ -126,14 +127,22 @@ def run_game(config):
             word_probs, receiver_probs, target, word_selected, image_selected,
             reward, selected_word_prob, selected_image_prob))
             # update the weights after the batch update
-            if (i+1) % mini_batch_size == 0:
-                accuracy = successes / (i + 1) * 100
-                print('Total accuracy : {}%'.format(accuracy))
-                print('Updating the agent weights')
-                agents.update(batch)
-                # reset the batch after one update
-                batch = []
-            total_reward += reward
+            # if (i+1) % mini_batch_size == 0:
+            #     accuracy = successes / (i + 1) * 100
+            #     print('Total accuracy : {}%'.format(accuracy))
+            #     print('Updating the agent weights')
+            #     agents.update(batch)
+            #     # reset the batch after one update
+            #     batch = []
+            # total_reward += reward
+
+            # stochastic update, no batch
+            accuracy = successes / (i + 1) * 100
+            print('Total accuracy : {}%'.format(accuracy))
+            print('Updating the agent weights')
+            agents.update(Game(shuffled_acts, target_acts, distractor_acts,
+            word_probs, receiver_probs, target, word_selected, image_selected,
+            reward, selected_word_prob, selected_image_prob))
 
 def main():
 

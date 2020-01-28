@@ -11,6 +11,15 @@ from torch.nn import CrossEntropyLoss, NLLLoss
 from AgnosticSender import AgnosticSender
 from Receiver import Receiver
 
+class LossPolicy(Module):
+    def __init__(self):
+        super(LossPolicy,self).__init__()
+
+    def forward(self, selected_word_prob ,reward):
+        result = np.mean(np.multiply(np.transpose(np.log(selected_word_prob)), reward))
+        res_tensor = torch.tensor(result, requires_grad = True)
+        return res_tensor
+
 class Agents:
     # class containing pair of agents:
     # the sender agent, who receives the activations of possible images, maps
@@ -29,10 +38,16 @@ class Agents:
         # TODO: move models to device
         self.sender = AgnosticSender(vocab = self.vocab, input_dim = 1000, h_units=self.image_embedding_dim, image_embedding_dim=self.image_embedding_dim)
         self.receiver = Receiver(1000, self.image_embedding_dim)
+        for n in self.sender.parameters():
+            print (n)
+        for n in self.receiver.parameters():
+            print(n)
         self.sender_optimizer = Adam(self.sender.parameters(), lr=self.learning_rate)
         self.receiver_optimizer = Adam(self.receiver.parameters(), lr=self.learning_rate)
         w_init = torch.empty(self.vocab_len, self.word_embedding_dim).normal_(mean=0.0, std=0.01)
         self.vocab_embedding = Variable(w_init, requires_grad = True)
+        self.sender_loss = LossPolicy()
+        self.receiver_loss = LossPolicy()
         self.word = None
 
    # TODO: move this logic into a receiver agent class
@@ -47,20 +62,20 @@ class Agents:
         return self.sender.forward(target_acts, distractor_acts)
 
     #TODO: is this handled here in a PyTorch workflow?
-    def update(self, batch):
+    def update(self, game):
+        print(game)
         # obtains these variables from every game in the Batch
-        zip_batch = list(zip(*batch))
-        acts = np.squeeze(np.array(zip_batch[0]))
-        target_acts = np.squeeze(np.array(torch.stack(zip_batch[1])))
-        distractor_acts = np.squeeze(np.array(torch.stack(zip_batch[2])))
-        word_probs = np.squeeze(np.array(zip_batch[3]))
-        receiver_probs = np.squeeze(np.array(zip_batch[4]))
-        target = np.squeeze(np.array(zip_batch[5]))
-        word = np.squeeze(np.array(zip_batch[6]))
-        selection = np.squeeze(np.array(zip_batch[7]))
-        reward = np.squeeze(np.array(zip_batch[8]))
-        selected_word_prob = np.squeeze(np.array(zip_batch[9]))
-        selected_image_prob = np.squeeze(np.array(zip_batch[10]))
+        acts = game[0]
+        target_acts = game[1]
+        distractor_acts = game[2]
+        word_probs = game[3]
+        receiver_probs = game[4]
+        target = game[5]
+        word = game[6]
+        selection = game[7]
+        reward = game[8]
+        selected_word_prob = game[9]
+        selected_image_prob = game[10]
 
         # normalises variables
         reward = np.reshape(reward, [-1, 1])
@@ -72,39 +87,74 @@ class Agents:
         receiver_probs = np.reshape(receiver_probs, [-1, 2])
         word_probs = np.reshape(word_probs, [-1, 2])
 
-        # turns a collection of probability distributions for a word
-        # i.e. [[0.9,0.1], [0.7,0.3]]
-        # into a single average probability distribution
-        # i.e. [0.8,0.2]
-        word_probs_tensor = torch.tensor(prob_range_to_average_distribution(word_probs))
-        word_tensor = torch.tensor(word)
+        self.sender_optimizer.zero_grad()
+        self.receiver_optimizer.zero_grad()
 
-        self.sender.train()
-        self.receiver.train()
-
-        # calculates loss for sender/receiver
-        # not sure about the cross entropy loss here?
-        # sender_loss_policy = CrossEntropyLoss()
-        # sender_loss = sender_loss_policy(input=word_probs_tensor,target=word_tensor)
-        # sender_loss.backwards()
-        sender_loss = torch.tensor(-1 * np.mean(np.multiply(prob_range_to_average_distribution(word_probs), reward)), requires_grad=True)
-        sender_loss.backward()
+        # calculates loss for agents
+        sender_loss_value = self.sender_loss(selected_word_prob, reward)
+        sender_loss_value.backward()
+        print(sender_loss_value.item())
 
         # receiver_loss_policy = CrossEntropyLoss()
-        receiver_loss_policy = NLLLoss()
-        selection_list = selection.tolist()[0]
-        receiver_probs_tensor = torch.tensor(np.log(receiver_probs), requires_grad = True)
-        selection_tensor = torch.tensor(selection_list)
-        receiver_loss = torch.tensor(receiver_loss_policy(input=receiver_probs_tensor, target=selection_tensor), requires_grad=True)
-        receiver_loss.backward()
+        receiver_loss_value = self.receiver_loss(selected_image_prob, reward)
+        receiver_loss_value.backward()
+        print(receiver_loss_value.item())
 
-        # self.sender_optimizer.zero_grad()
-        # self.receiver_optimizer.zero_grad()
+        # applies gradient descent backwards
         self.sender_optimizer.step()
         self.receiver_optimizer.step()
 
-        self.sender.eval()
-        self.receiver.eval()
+        #TODO: is this handled here in a PyTorch workflow?
+        # def update_batch(self, batch):
+        #     # obtains these variables from every game in the Batch
+        #     zip_batch = list(zip(*batch))
+        #     acts = np.squeeze(np.array(zip_batch[0]))
+        #     target_acts = np.squeeze(np.array(torch.stack(zip_batch[1])))
+        #     distractor_acts = np.squeeze(np.array(torch.stack(zip_batch[2])))
+        #     word_probs = np.squeeze(np.array(zip_batch[3]))
+        #     receiver_probs = np.squeeze(np.array(zip_batch[4]))
+        #     target = np.squeeze(np.array(zip_batch[5]))
+        #     word = np.squeeze(np.array(zip_batch[6]))
+        #     selection = np.squeeze(np.array(zip_batch[7]))
+        #     reward = np.squeeze(np.array(zip_batch[8]))
+        #     selected_word_prob = np.squeeze(np.array(zip_batch[9]))
+        #     selected_image_prob = np.squeeze(np.array(zip_batch[10]))
+        #
+        #     # normalises variables
+        #     reward = np.reshape(reward, [-1, 1])
+        #     selection = np.reshape(selection, [1, -1])
+        #     word = np.reshape(word, [1, -1])
+        #     target_acts = np.reshape(target_acts, [-1, 1000])
+        #     distractor_acts = np.reshape(distractor_acts, [-1, 1000])
+        #     acts = np.reshape(acts, [-1, 2000])
+        #     receiver_probs = np.reshape(receiver_probs, [-1, 2])
+        #     word_probs = np.reshape(word_probs, [-1, 2])
+        #
+        #     # turns a collection of probability distributions for a word
+        #     # i.e. [[0.9,0.1], [0.7,0.3]]
+        #     # into a single average probability distribution
+        #     # i.e. [0.8,0.2]
+        #     word_probs_tensor = torch.tensor(prob_range_to_average_distribution(word_probs))
+        #     word_tensor = torch.tensor(word)
+        #
+        #     self.sender.train()
+        #     self.receiver.train()
+        #
+        #     # calculates loss for agents
+        #     sender_loss_value = sender_loss
+        #     sender_loss_value.backward()
+        #
+        #     # receiver_loss_policy = CrossEntropyLoss()
+        #     receiver_loss_policy = NLLLoss()
+        #     selection_list = selection.tolist()[0]
+        #     receiver_probs_tensor = torch.tensor(np.log(receiver_probs), requires_grad = True)
+        #     selection_tensor = torch.tensor(selection_list)
+        #     receiver_loss = torch.tensor(receiver_loss_policy(input=receiver_probs_tensor, target=selection_tensor), requires_grad=True)
+        #     receiver_loss.backward()
+        #
+        #     # applies gradient descent backwards
+        #     self.sender_optimizer.step()
+        #     self.receiver_optimizer.step()
 
 def prob_range_to_average_distribution(prob_range):
     """
