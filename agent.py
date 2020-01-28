@@ -11,29 +11,6 @@ from torch.nn import CrossEntropyLoss, NLLLoss
 from AgnosticSender import AgnosticSender
 from Receiver import Receiver
 
-class LossPolicy(Module):
-    def __init__(self):
-        super(LossPolicy,self).__init__()
-
-    def forward(self, selected_word_prob ,reward):
-        result = np.mean(-1 * np.multiply(np.transpose(np.log(selected_word_prob)), reward))
-        res_tensor = torch.tensor(result, requires_grad = True)
-        return res_tensor
-
-# class representing the model that generates probabilities for each word
-class WordProbabilityModel():
-    def __init__(self, image_embedding_dim):
-        super(WordProbabilityModel, self).__init__()
-        # dense network implementation
-        self.hidden_layer = Linear(2, 2 * image_embedding_dim)
-        self.output_layer = Linear(2 * image_embedding_dim, 2)
-
-    def forward(self, x):
-        # passes the input through the linear layers
-        x = self.hidden_layer(x)
-        x = self.output_layer(x)
-        return torch.softmax(x, dim = 1)
-
 class Agents:
     # class containing pair of agents:
     # the sender agent, who receives the activations of possible images, maps
@@ -52,43 +29,18 @@ class Agents:
         # TODO: move models to device
         self.sender = AgnosticSender(vocab = self.vocab, input_dim = 1000, h_units=self.image_embedding_dim, image_embedding_dim=self.image_embedding_dim)
         self.receiver = Receiver(1000, self.image_embedding_dim)
-        self.word_probs_model = WordProbabilityModel(self.image_embedding_dim)
         self.sender_optimizer = Adam(self.sender.parameters(), lr=self.learning_rate)
         self.receiver_optimizer = Adam(self.receiver.parameters(), lr=self.learning_rate)
         w_init = torch.empty(self.vocab_len, self.word_embedding_dim).normal_(mean=0.0, std=0.01)
         self.vocab_embedding = Variable(w_init, requires_grad = True)
-        # self.vocab_embedding = Variable(w_init(shape=(self.vocab_len, self.word_embedding_dim), dtype='float32'), trainable=True)
-        self.loss = LossPolicy()
+        self.word = None
 
    # TODO: move this logic into a receiver agent class
    # function that returns the image chosen by the receiver agent and the
    # probability distribution for each word
     def get_receiver_selection(self, word, im1_acts, im2_acts):
-        # slices the vocab embedding using the word as the indice
-        word_gathered = self.vocab_embedding[self.word]
-        # strips any dimensions equal to 1
-        word_embed = torch.squeeze(word_gathered)
-        # embeds the images into game-specific spaces using the receiver
-        im1_embed = self.receiver(im1_acts)
-        im2_embed = self.receiver(im2_acts)
-        # calculates the score for each image by multiplying the image embed
-        # by the word embedding, then summing along the columns
-        im1_mm = torch.mul(im1_embed, word_embed)
-        im1_score = torch.sum(im1_mm, dim=1).numpy()[0]
+        return self.receiver.forward(im1_acts, im2_acts, self.vocab_embedding, word)
 
-        im2_mm = torch.mul(im2_embed, word_embed)
-        im2_score = torch.sum(im2_mm, dim=1).numpy()[0]
-
-        # turns embeddings into probability distribution using the softmax
-        # function
-        image_probs = torch.softmax(torch.FloatTensor([im1_score, im2_score]), dim=0).numpy()
-        # chooses
-        selection = np.random.choice(np.arange(2), p=image_probs)
-        # returns the probability distribution and chosen image
-        return image_probs, selection, image_probs[selection]
-
-
-    # TODO: move this logic into a sender agent class
     # function that returns the word chosen by the sender and the probability
     # distribution
     def get_sender_word_probs(self, target_acts, distractor_acts):
@@ -109,8 +61,6 @@ class Agents:
         reward = np.squeeze(np.array(zip_batch[8]))
         selected_word_prob = np.squeeze(np.array(zip_batch[9]))
         selected_image_prob = np.squeeze(np.array(zip_batch[10]))
-
-        # mean_word_probs = np.mean(word_probs).squeeze()
 
         # normalises variables
         reward = np.reshape(reward, [-1, 1])

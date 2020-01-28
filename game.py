@@ -74,6 +74,10 @@ def run_game(config):
     batch = []
     total_reward = 0
     successes = 0
+
+    # for n in agents.sender.named_parameters():
+    #     print(n)
+
     with torch.no_grad():
         for i in range(iterations):
             print("Round {}/{}".format(i, iterations), end = "\n")

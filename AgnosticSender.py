@@ -32,14 +32,9 @@ class AgnosticSender(Module):
       self.vocab = vocab
       # has a single layer to embed the images
       self.linear1 = Linear(input_dim, h_units, bias=None)
-      # setting the weights for the linear layer as a parameter
-      w_init = torch.empty(input_dim, h_units).normal_(mean=0.0, std=0.01)
       # defines weights as a new tensor
-      self.linear1.weight = torch.nn.Parameter(torch.empty(input_dim, h_units)
-      .normal_(mean=0.0, std=0.01), requires_grad=True)
-      self.w = torch.nn.Parameter(torch.empty(input_dim, h_units)
-      .normal_(mean=0.0, std=0.01), requires_grad=True)
-
+      self.linear1.weight = torch.nn.Parameter(torch.empty(input_dim, h_units).normal_(mean=0.0, std=0.01), requires_grad=True)
+      # TODO: make this part of the linear layer
       # sets the biases to contain zeroes
       b_init = torch.zeros(h_units)
       # defines biases as a new tensor
@@ -58,7 +53,6 @@ class AgnosticSender(Module):
       embed = self.sig(input)
       # print(embed)
       return embed
-
 
   def forward(self, target, distractor):
       # embeds target in game embedding space
