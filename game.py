@@ -15,6 +15,7 @@ from collections import deque, namedtuple
 from torch.optim import Adam
 from torch.autograd import Variable
 from LossPolicy import LossPolicy
+from torch.nn import Embedding
 
 def shuffle_image_activations(im_acts):
     reordering = np.array(range(len(im_acts)))
@@ -51,18 +52,25 @@ def run_game(config):
     # number of words in the vocabulary
     vocab_len = len(vocab)
     # creates sender/receiver agents which are used to populate the game
-
-    sender = AgnosticSender(vocab = vocab, input_dim = 1000, h_units= image_embedding_dim, image_embedding_dim= image_embedding_dim)
+    sender = AgnosticSender(vocab = vocab, input_dim = 1000, h_units= image_embedding_dim, image_embedding_dim= image_embedding_dim, word_embedding_dim= word_embedding_dim)
     receiver = Receiver(1000, image_embedding_dim)
-    # define the loss policy for
+
+    # define the loss policy for agents
     sender_loss = LossPolicy()
     receiver_loss = LossPolicy()
+    # defines optimisers for agents
+    for key in sender.state_dict():
+        value = sender.state_dict().get(key)
+        print(key, value.size())
 
     sender_optimizer = Adam(sender.parameters(), lr=learning_rate)
     receiver_optimizer = Adam(receiver.parameters(), lr=learning_rate)
 
-    w_init = torch.empty(vocab_len, word_embedding_dim).normal_(mean=0.0, std=0.01)
-    vocab_embedding = Variable(w_init, requires_grad = True)
+    # w_init = torch.empty(vocab_len, word_embedding_dim).normal_(mean=0.0, std=0.01)
+    # vocab_embedding = Variable(w_init, requires_grad = True)
+
+    # vocab_embedding = Embedding(vocab_len, word_embedding_dim)
+    # print(vocab_embedding)
 
     # creates a referential game environment
     # TODO: modify the environment so it can take more classes/distractors
@@ -85,16 +93,14 @@ def run_game(config):
 
     with torch.no_grad():
         for i in range(iterations):
-
             sender.train()
             receiver.train()
-
             print("Round {}/{}".format(i, iterations), end = "\n")
             # gets a new target/distractor pair from the environment
             target_image, distractor_image = environ.get_images()
             # reshapes images into expected shape for VGG model
             target_image = target_image.reshape((1, 3, 224, 224))
-            distractor_image = distractor_image.reshape((1, 3,224, 224))
+            distractor_image = distractor_image.reshape((1, 3, 224, 224))
             # sets the target class variable
             target_class = environ.target_class
             # vertically stacks numpy array of image
@@ -102,11 +108,11 @@ def run_game(config):
             # gets actual classifications from prediction of vgg model
             td_images_tensor = torch.from_numpy(td_images)
             td_acts = model(td_images_tensor)
-            # reshapes predictions
+            # reshapes predictions into expected shape
             target_acts = td_acts[0].reshape((1, 1000))
             distractor_acts = td_acts[1].reshape((1, 1000))
             # gets the sender's chosen word and the associated probability
-            word_probs, word_selected, selected_word_prob = sender.forward(
+            word_probs, word_selected, word_embedding, selected_word_prob = sender.forward(
             target_acts, distractor_acts)
             print("Sender sent {} with a chance of {} for image {}".format(vocab[word_selected],
             selected_word_prob,target_class))
@@ -121,7 +127,15 @@ def run_game(config):
             for i, img in enumerate(img_array)]
             # gets the receiver's chosen target and associated probability
             receiver_probs, image_selected, selected_image_prob = receiver.forward(
-            im1_acts, im2_acts, vocab_embedding, word_selected)
+            im1_acts, im2_acts, word_embedding)
+
+            # # gets the word as a symbol from the vocabulary embedding
+            # word_selected_embedding = vocab_embedding(torch.tensor(word_selected))
+            #
+            # # gets the receiver's chosen target and associated probability
+            # receiver_probs, image_selected, selected_image_prob = receiver.forward(
+            # im1_acts, im2_acts, word_selected_embedding)
+
             print("Receiver chose image {} with a chance of {}, target was image {}".format(image_selected, selected_image_prob, target))
             # gives a payoff if the target is the same as the selected image
             reward = 0.0
@@ -156,9 +170,11 @@ def run_game(config):
 
             # calculates loss for agents
             sender_loss_value = sender_loss(selected_word_prob, reward)
+            print("Sender loss {}".format(sender_loss_value))
             sender_loss_value.backward()
 
             receiver_loss_value = receiver_loss(selected_image_prob, reward)
+            print("Receiver loss {}".format(receiver_loss_value))
             receiver_loss_value.backward()
 
             # applies gradient descent backwards

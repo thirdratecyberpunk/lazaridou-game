@@ -31,17 +31,17 @@ class Receiver(Module):
        Embeds a given image representation into a game specific space
        """
        input = torch.mm(inputs, self.linear1.weight).add(self.b)
-       # input = self.linear1(inputs)
        embed = self.sig(input)
-       # print(embed)
        return embed
 
-  def forward(self, image_1, image_2, vocab_embedding, word):
+  def forward(self, image_1, image_2, word_embed):
       # embeds images into game specific space
       im1_embed = Receiver.embed_image_to_gss(self, image_1)
       im2_embed = Receiver.embed_image_to_gss(self, image_2)
-      # embeds symbol into game specific space
-      word_embed = torch.squeeze(vocab_embedding[word])
+      # embeds symbol given as vector into game specific space
+      # word_embed = torch.squeeze(vocab_embedding[word])
+      # print(word)
+      # word_embed = Receiver.embed_image_to_gss(self, word)
       # computes dot product between symbol and images
       im1_mm = torch.mul(im1_embed, word_embed)
       im1_score = torch.sum(im1_mm, dim=1).numpy()[0]
