@@ -17,10 +17,6 @@ class Receiver(Module):
       self.linear1 = Linear(input_dim, h_units, bias=None)
       # defines weights as a new tensor
       self.linear1.weight = torch.nn.Parameter(torch.empty(input_dim, h_units).normal_(mean=0.0, std=0.01), requires_grad=True)
-      # sets the biases to contain zeroes
-      b_init = torch.zeros(h_units)
-      # defines biases as a new tensor
-      self.b = torch.nn.Parameter(torch.zeros(h_units), requires_grad=True)
       # defines sigmoid function
       self.sig = Sigmoid()
       # defines softmax function
@@ -30,7 +26,7 @@ class Receiver(Module):
        """
        Embeds a given image representation into a game specific space
        """
-       input = torch.mm(inputs, self.linear1.weight).add(self.b)
+       input = torch.matmul(inputs, self.linear1.weight)
        embed = self.sig(input)
        return embed
 
@@ -50,6 +46,7 @@ class Receiver(Module):
       scores = torch.FloatTensor([im1_score, im2_score])
       # converts dot products into Gibbs distribution
       image_probs = self.softmax(scores).numpy()
+      print(image_probs)
       # choose image by sampling from Gibbs distribution
       selection = np.random.choice(np.arange(2), p=image_probs)
       # return the probability distribution, chosen word, and probability of chosen word

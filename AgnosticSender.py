@@ -31,32 +31,28 @@ class AgnosticSender(Module):
   def __init__(self, vocab, input_dim=32, h_units=32, image_embedding_dim=2, word_embedding_dim=2):
       super(AgnosticSender, self).__init__()
       self.vocab = vocab
-      # has a single layer to embed the images
+      # has a single linear layer to embed the images
       self.linear1 = Linear(input_dim, h_units, bias=None)
       # defines weights as a new tensor
       self.linear1.weight = torch.nn.Parameter(torch.empty(input_dim, h_units).normal_(mean=0.0, std=0.01), requires_grad=True)
-      # TODO: make this part of the linear layer
-      # sets the biases to contain zeroes
-      b_init = torch.zeros(h_units)
-      # defines biases as a new tensor
-      self.b = torch.nn.Parameter(torch.zeros(h_units), requires_grad=True)
-      # embedding layer for the vocabulary
-      # self.embedding = Embedding(input_dim, word_embedding_dim)
       # defines sigmoid function
       self.sig = Sigmoid()
 
       self.add_module("word_prediction_model", WordProbabilityModel(image_embedding_dim))
+      #self.add_module("image_embedding", Embedding(input_dim, image_embedding_dim))
+      # embedding layer for vocabulary
       self.add_module("vocab_embedding", Embedding(input_dim, word_embedding_dim))
 
   def embed_image_to_gss(self, inputs):
       """
       Embeds a given image representation into a game specific space
       """
-      input = torch.mm(inputs, self.linear1.weight).add(self.b)
-      # input = self.linear1(inputs)
+      input = torch.matmul(inputs, self.linear1.weight)
       embed = self.sig(input)
-      # print(embed)
       return embed
+      # print(inputs)
+      # embed = self.image_embedding(inputs)
+      # return embed
 
   def forward(self, target, distractor):
       # embeds target in game embedding space

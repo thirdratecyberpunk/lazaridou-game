@@ -49,6 +49,8 @@ def run_game(config):
     temperature = config['temperature']
     # whether the model should be loaded from a pretrained model
     load_model = config['load_model'] == 'True'
+    # weight decay -> factor that parameters are multiplied by during loss
+    weight_decay = config['weight_decay']
     # number of words in the vocabulary
     vocab_len = len(vocab)
     # creates sender/receiver agents which are used to populate the game
@@ -63,8 +65,8 @@ def run_game(config):
         value = sender.state_dict().get(key)
         print(key, value.size())
 
-    sender_optimizer = Adam(sender.parameters(), lr=learning_rate)
-    receiver_optimizer = Adam(receiver.parameters(), lr=learning_rate)
+    sender_optimizer = Adam(sender.parameters(), lr=learning_rate, weight_decay = weight_decay)
+    receiver_optimizer = Adam(receiver.parameters(), lr=learning_rate, weight_decay = weight_decay)
 
     # w_init = torch.empty(vocab_len, word_embedding_dim).normal_(mean=0.0, std=0.01)
     # vocab_embedding = Variable(w_init, requires_grad = True)
