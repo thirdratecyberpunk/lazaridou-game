@@ -9,7 +9,8 @@ model_weights: vgg16.npy
 learning_rate: 0.2
 load_model: False
 weight_decay: 0.0
-display_rounds: True
+display_rounds: False
+display_accuracy: True
 
 log_path: logs
 

@@ -16,6 +16,7 @@ from torch.optim import Adam
 from torch.autograd import Variable
 from LossPolicy import LossPolicy
 from torch.nn import Embedding
+from display import display_accuracy_graph
 
 def shuffle_image_activations(im_acts):
     reordering = np.array(range(len(im_acts)))
@@ -53,6 +54,8 @@ def run_game(config, device):
     weight_decay = config['weight_decay']
     # whether round configuration should be displayed as a matplotlib diagram
     display_rounds = config['display_rounds']
+    # whether results should be displayed as a matplotlib diagram
+    display_accuracy = config['display_accuracy']
     # number of words in the vocabulary
     vocab_len = len(vocab)
     # creates sender/receiver agents which are used to populate the game
@@ -94,6 +97,7 @@ def run_game(config, device):
     batch = []
     total_reward = 0
     successes = 0
+    accuracy = []
 
     with torch.no_grad():
         for i in range(iterations):
@@ -133,13 +137,6 @@ def run_game(config, device):
             receiver_probs, image_selected, selected_image_prob = receiver.forward(
             im1_acts, im2_acts, word_embedding)
 
-            # # gets the word as a symbol from the vocabulary embedding
-            # word_selected_embedding = vocab_embedding(torch.tensor(word_selected))
-            #
-            # # gets the receiver's chosen target and associated probability
-            # receiver_probs, image_selected, selected_image_prob = receiver.forward(
-            # im1_acts, im2_acts, word_selected_embedding)
-
             print("Receiver chose image {} with a chance of {}, target was image {}".format(image_selected, selected_image_prob, target))
             # gives a payoff if the target is the same as the selected image
             reward = 0.0
@@ -163,8 +160,9 @@ def run_game(config, device):
             # total_reward += reward
 
             # stochastic update, no batch
-            accuracy = successes / (i + 1) * 100
-            print('Total accuracy : {}%'.format(accuracy))
+            current_accuracy = successes / (i + 1) * 100
+            accuracy.append(current_accuracy)
+            print('Total accuracy : {}%'.format(current_accuracy))
             print('Updating the agent weights')
             # agents.update(Game(shuffled_acts, target_acts, distractor_acts,
             # word_probs, receiver_probs, target, word_selected, image_selected,
@@ -184,6 +182,9 @@ def run_game(config, device):
             # applies gradient descent backwards
             sender_optimizer.step()
             receiver_optimizer.step()
+
+        if (display_accuracy):
+            display_accuracy_graph(accuracy)
 
 def main():
 
