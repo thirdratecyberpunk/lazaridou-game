@@ -2,10 +2,10 @@
 import sys
 import os
 import numpy as np
-from AgnosticSender import AgnosticSender
-from Receiver import Receiver
-from RandomSender import RandomSender
-from RandomReceiver import RandomReceiver
+from architectures.senders.AgnosticSender import AgnosticSender
+from architectures.receivers.Receiver import Receiver
+from architectures.senders.RandomSender import RandomSender
+from architectures.receivers.RandomReceiver import RandomReceiver
 import env
 import random
 import torch

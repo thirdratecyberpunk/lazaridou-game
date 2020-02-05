@@ -41,12 +41,13 @@ class Receiver(Module):
       # computes dot product between symbol and images
       im1_mm = torch.mul(im1_embed, word_embed)
       im1_score = torch.sum(im1_mm, dim=1).numpy()[0]
+
       im2_mm = torch.mul(im2_embed, word_embed)
       im2_score = torch.sum(im2_mm, dim=1).numpy()[0]
+
       scores = torch.FloatTensor([im1_score, im2_score])
       # converts dot products into Gibbs distribution
       image_probs = self.softmax(scores).numpy()
-      print(image_probs)
       # choose image by sampling from Gibbs distribution
       selection = np.random.choice(np.arange(2), p=image_probs)
       # return the probability distribution, chosen word, and probability of chosen word

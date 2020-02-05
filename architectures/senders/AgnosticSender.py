@@ -24,6 +24,9 @@ class WordProbabilityModel(Module):
         x = self.s(x)
         return torch.softmax(x, dim = 1)
 
+    def backwards(self, x):
+        print("I am being called!")
+
 # agent that takes in the target, any distractors and the vocabulary
 # and sends a single word from the vocabulary
 class AgnosticSender(Module):
@@ -39,7 +42,8 @@ class AgnosticSender(Module):
       self.sig = Sigmoid()
 
       self.add_module("word_prediction_model", WordProbabilityModel(image_embedding_dim))
-      #self.add_module("image_embedding", Embedding(input_dim, image_embedding_dim))
+      # embedding layer for images into game-specific space
+      self.add_module("image_embedding", Embedding(input_dim, image_embedding_dim))
       # embedding layer for vocabulary
       self.add_module("vocab_embedding", Embedding(input_dim, word_embedding_dim))
 
@@ -50,9 +54,6 @@ class AgnosticSender(Module):
       input = torch.matmul(inputs, self.linear1.weight)
       embed = self.sig(input)
       return embed
-      # print(inputs)
-      # embed = self.image_embedding(inputs)
-      # return embed
 
   def forward(self, target, distractor):
       # embeds target in game embedding space
@@ -63,9 +64,7 @@ class AgnosticSender(Module):
       ordered_embed = np.concatenate([target_embedding, distractor_embedding], axis=0)
       ordered_embed_tensor = torch.from_numpy(ordered_embed)
       # obtains probability distribution for all words
-      word_probs = self.word_prediction_model.forward(ordered_embed_tensor).numpy()
-      # print(word_probs)
-      word_probs = word_probs[0]
+      word_probs = self.word_prediction_model.forward(ordered_embed_tensor).numpy()[0]
       # chooses a word to send by sampling from the probability distribution
       word = np.random.choice(np.arange(len(self.vocab)), p=word_probs)
       # samples the word from the vocabulary embedding
