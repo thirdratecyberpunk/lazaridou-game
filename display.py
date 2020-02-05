@@ -1,20 +1,22 @@
 import matplotlib.pyplot as plt
 
-def display_accuracy_graph(accuracy):
+def display_comm_succ_graph(comm_succ):
     """
-    Function to display accuracy of agents over time as a graph
+    Function to display communication success rate of agents over time as a graph
 
     Parameters
     ----------
-    accuracy: array of accuracies
+    comm_succ_rate: dictionary of communication success rate
     """
 
     fig = plt.figure()
     ax = fig.add_subplot()
-    ax.plot(accuracy)
-    ax.set(title="Accuracy of agents",
+    for key, value in comm_succ.items():
+        ax.plot(value, label = key)
+    ax.set(title="Communication success rate of agents (%)",
             xlabel="Number of rounds",
-            ylabel="Accuracy")
+            ylabel="Communication success rate (%)")
+    ax.legend(loc="lower right")
     plt.show()
 
 def plot_figures(figures, nrows = 1, ncols=1):

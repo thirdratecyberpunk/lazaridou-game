@@ -10,7 +10,7 @@ learning_rate: 0.2
 load_model: False
 weight_decay: 0.0
 display_rounds: False
-display_accuracy: True
+display_comm_succ: True
 
 log_path: logs
 

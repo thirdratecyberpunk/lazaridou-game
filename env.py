@@ -8,8 +8,7 @@ import skimage
 from skimage import io
 import matplotlib.pyplot as plt
 import os
-from display import display_accuracy_graph
-
+from display import plot_figures
 # loads an image from a directory and applies a transformation to it
 def load_image(path):
     image = Image.open(path)
