@@ -9,14 +9,14 @@ model_weights: vgg16.npy
 learning_rate: 0.2
 load_model: False
 weight_decay: 0.0
-
+display_rounds: True
 
 log_path: logs
 
 data_dir: data
 image_dirs:
-    - cat
-    - dog
+    - mice-10
+    - dog-10
 vocab:
+    - miceword
     - catword
-    - dogword

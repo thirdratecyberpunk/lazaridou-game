@@ -24,7 +24,7 @@ def shuffle_image_activations(im_acts):
     shuffled = im_acts[reordering]
     return (shuffled, target_ind)
 
-def run_game(config):
+def run_game(config, device):
     # dimensionality of the image embedding
     image_embedding_dim = config['image_embedding_dim']
     # dimensionality of the word embedding
@@ -51,6 +51,8 @@ def run_game(config):
     load_model = config['load_model'] == 'True'
     # weight decay -> factor that parameters are multiplied by during loss
     weight_decay = config['weight_decay']
+    # whether round configuration should be displayed as a matplotlib diagram
+    display_rounds = config['display_rounds']
     # number of words in the vocabulary
     vocab_len = len(vocab)
     # creates sender/receiver agents which are used to populate the game
@@ -83,7 +85,7 @@ def run_game(config):
     losses = 0
 
     # loads the pretrained VGG16 model
-    model = models.vgg16(pretrained=True)
+    model = models.vgg16()
     # creates a batch to store all game rounds
     # mathematical definition of game as explained by Lazaridou
     Game = namedtuple("Game", ["im_acts", "target_acts", "distractor_acts",
@@ -99,7 +101,7 @@ def run_game(config):
             receiver.train()
             print("Round {}/{}".format(i, iterations), end = "\n")
             # gets a new target/distractor pair from the environment
-            target_image, distractor_image = environ.get_images()
+            target_image, distractor_image = environ.get_images(display_rounds)
             # reshapes images into expected shape for VGG model
             target_image = target_image.reshape((1, 3, 224, 224))
             distractor_image = distractor_image.reshape((1, 3, 224, 224))
@@ -189,6 +191,9 @@ def main():
     parser.add_argument('--seed', type = int, default = 0, help="Value used as the seed for random generators")
     parser.add_argument('--conf', required=True, help="Location of configuration file for game.")
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(device)
+
     args = parser.parse_args()
     conf = args.conf
 
@@ -200,7 +205,7 @@ def main():
     with open(conf) as g:
         config = yaml.load(g, Loader=yaml.FullLoader)
 
-    run_game(config)
+    run_game(config,device)
 
 if __name__ == '__main__':
     main()

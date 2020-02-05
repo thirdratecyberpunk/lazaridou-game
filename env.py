@@ -9,6 +9,23 @@ from skimage import io
 import matplotlib.pyplot as plt
 import os
 
+def plot_figures(figures, nrows = 1, ncols=1):
+    """Plot a dictionary of figures.
+
+    Parameters
+    ----------
+    figures : <title, figure> dictionary
+    ncols : number of columns of subplots wanted in the display
+    nrows : number of rows of subplots wanted in the figure
+    """
+
+    fig, axeslist = plt.subplots(ncols=ncols, nrows=nrows)
+    for ind,title in enumerate(figures):
+        axeslist.ravel()[ind].imshow(figures[ind], cmap=plt.gray())
+        axeslist.ravel()[ind].set_title(ind)
+        axeslist.ravel()[ind].set_axis_off()
+    plt.tight_layout() # optional
+    plt.show()
 
 # loads an image from a directory and applies a transformation to it
 def load_image(path):
@@ -22,9 +39,6 @@ def load_image(path):
             ])
     image = transform(image)
     arr = np.array(image)
-    # plt.figure()
-    # plt.imshow(arr)
-    # plt.show()
     return image
 
 def get_all_images(path):
@@ -50,13 +64,12 @@ class Environment:
 
     # TODO: tidy this up, feels a little messy
     # TODO: try replacing this with a data loader class? more PyTorchy
-    def get_images(self):
+    def get_images(self, display = False):
         # picks a random class for target/distractor pair
         im1_class, im2_class = np.random.choice(list(range(self.num_classes)),
         2, replace=False)
         # gets directory for images
         im1_dir, im2_dir = self.img_dirs[im1_class], self.img_dirs[im2_class]
-
         ## Temp var for sender training, remove later
         self.target_class = im1_dir
 
@@ -78,6 +91,14 @@ class Environment:
         # Load selected image
         self.target = load_image(target_file)
         self.distractor = load_image(distractor_file)
+
+        if display:
+            # reshapes the image tensor into the expected shape
+            target_display = self.target.reshape(224, 224, 3)
+            distractor_display = self.distractor.reshape(224, 224, 3)
+
+            figures = [target_display, distractor_display]
+            plot_figures(figures, 1, 2)
 
         return (self.target, self.distractor)
 
