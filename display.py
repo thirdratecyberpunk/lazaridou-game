@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import numpy as np
 
 def display_comm_succ_graph(comm_succ):
     """
@@ -16,6 +17,8 @@ def display_comm_succ_graph(comm_succ):
     ax.set(title="Communication success rate of agents (%)",
             xlabel="Number of rounds",
             ylabel="Communication success rate (%)")
+    ax.set_ylim([0,100])
+    ax.set_yticks(np.arange(0,100,10))
     ax.legend(loc="lower right")
     plt.show()
 
