@@ -113,7 +113,8 @@ def run_game(config, device):
             receiver.train()
             print("Round {}/{}".format(i, iterations), end = "\n")
             # gets a new target/distractor pair from the environment
-            target_image, distractor_image = environ.get_images(display_rounds)
+            # target_image, distractor_image = environ.get_images(display_rounds)
+            target_image, distractor_image = environ.get_all_zero_images(display_rounds)
             # reshapes images into expected shape for VGG model
             target_image = target_image.reshape((1, 3, 224, 224))
             distractor_image = distractor_image.reshape((1, 3, 224, 224))

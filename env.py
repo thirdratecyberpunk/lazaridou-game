@@ -2,6 +2,7 @@
 # Environment contains information about the possible words,
 # target + distractor images and score for the game
 from torchvision import transforms, utils
+import torch
 import numpy as np
 from PIL import Image
 import skimage
@@ -9,6 +10,7 @@ from skimage import io
 import matplotlib.pyplot as plt
 import os
 from display import plot_figures
+import sys
 # loads an image from a directory and applies a transformation to it
 def load_image(path):
     image = Image.open(path)
@@ -43,6 +45,23 @@ class Environment:
         self.distractor = None
         # class of the target image
         self.target_class = None
+
+    def get_all_zero_images(self, display = False):
+        """
+        Returns an entirely empty set of images
+        """
+        self.target = torch.zeros([3, 224,224])
+        self.distractor = torch.zeros([3,224,224])
+
+        if display:
+            # reshapes the image tensor into the expected shape
+            target_display = self.target.reshape(224, 224, 3)
+            distractor_display = self.distractor.reshape(224, 224, 3)
+
+            figures = [target_display, distractor_display]
+            plot_figures(figures, 1, 2)
+
+        return self.target, self.distractor
 
     # TODO: tidy this up, feels a little messy
     # TODO: try replacing this with a data loader class? more PyTorchy
