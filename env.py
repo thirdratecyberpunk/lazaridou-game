@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import os
 from display import plot_figures
 import sys
+
 # loads an image from a directory and applies a transformation to it
 def load_image(path):
     image = Image.open(path)
