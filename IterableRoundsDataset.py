@@ -32,8 +32,10 @@ class IterableRoundsDataset(IterableDataset):
         return [os.path.join(path, i) for i in os.listdir(path) if i.endswith('.jpg')]
 
     @property
-    def shuffled_data_list(self):
-        return random.sample(self.data_list, len(self.data_list))
+    def shuffled_sublists(self):
+        for i in self.data_list:
+            random.shuffle(i)
+        return self.data_list
 
     def process_data(self, data):
         """
@@ -54,7 +56,7 @@ class IterableRoundsDataset(IterableDataset):
         return chain.from_iterable(map(self.process_data, cycle(data_list)))
 
     def get_streams(self):
-        return zip(*[self.get_stream([list]) for list in self.data_list])
+        return zip(*[self.get_stream([list]) for list in self.shuffled_sublists])
 
     def __iter__(self):
         return self.get_streams()
