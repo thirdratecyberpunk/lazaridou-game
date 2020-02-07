@@ -7,7 +7,7 @@ word_embedding_dim: 2
 image_embedding_dim: 2
 model_weights: vgg16.npy
 learning_rate: 0.2
-load_model: False
+load_model: True
 weight_decay: 0.0
 display_rounds: False
 display_comm_succ: True
@@ -16,8 +16,8 @@ log_path: logs
 
 data_dir: data
 image_dirs:
-    - mice-10
+    - cat-10
     - dog-10
 vocab:
-    - miceword
     - catword
+    - dogword

@@ -19,6 +19,8 @@ from torch.autograd import Variable
 from LossPolicy import LossPolicy
 from torch.nn import Embedding
 from display import display_comm_succ_graph
+from IterableRoundsDataset import IterableRoundsDataset
+from torch.utils.data import Dataset, DataLoader
 
 def shuffle_image_activations(im_acts):
     reordering = np.array(range(len(im_acts)))
@@ -72,27 +74,20 @@ def run_game(config, device):
     sender_loss = LossPolicy()
     receiver_loss = LossPolicy()
     # defines optimisers for agents
-    # for key in sender.state_dict():
-    #     value = sender.state_dict().get(key)
-    #     print(key, value.size())
+    for key in sender.state_dict():
+        value = sender.state_dict().get(key)
+        print(key, value.size())
 
     sender_optimizer = Adam(sender.parameters(), lr=learning_rate, weight_decay = weight_decay)
     receiver_optimizer = Adam(receiver.parameters(), lr=learning_rate, weight_decay = weight_decay)
 
-    # w_init = torch.empty(vocab_len, word_embedding_dim).normal_(mean=0.0, std=0.01)
-    # vocab_embedding = Variable(w_init, requires_grad = True)
+    # dataset
+    dataset = IterableRoundsDataset(image_dirs, data_dir, batch_size = 2)
 
-    # vocab_embedding = Embedding(vocab_len, word_embedding_dim)
-    # print(vocab_embedding)
-
-    # creates a referential game environment
-    # TODO: modify the environment so it can take more classes/distractors
-    environ = env.Environment(data_dir, image_dirs, 2)
-
-    total_rounds = 0
-    wins = 0
-    losses = 0
-
+    # TODO: load in testing data, add testing phase
+    # train_data, test_data = train_test_split(dataset, test_size=0.1)
+    train_loader = DataLoader(dataset)
+    # test_loader = DataLoader(test_data, batch_size = 5, shuffle=True, num_workers=2)
     # loads the pretrained VGG16 model
     model = models.vgg16()
     # creates a batch to store all game rounds
@@ -108,109 +103,115 @@ def run_game(config, device):
     random_comm_succ = []
 
     with torch.no_grad():
+
+        # training process
+        sender.train()
+        receiver.train()
+
+        # number of training iterations
         for i in range(iterations):
-            sender.train()
-            receiver.train()
             print("Round {}/{}".format(i, iterations), end = "\n")
-            # gets a new target/distractor pair from the environment
-            # target_image, distractor_image = environ.get_images(display_rounds)
-            target_image, distractor_image = environ.get_all_zero_images(display_rounds)
-            # reshapes images into expected shape for VGG model
-            target_image = target_image.reshape((1, 3, 224, 224))
-            distractor_image = distractor_image.reshape((1, 3, 224, 224))
-            # sets the target class variable
-            target_class = environ.target_class
-            # vertically stacks numpy array of image
-            td_images = np.vstack([target_image, distractor_image])
-            # gets actual classifications from prediction of vgg model
-            td_images_tensor = torch.from_numpy(td_images)
-            td_acts = model(td_images_tensor)
-            # reshapes predictions into expected shape
-            target_acts = td_acts[0].reshape((1, 1000))
-            distractor_acts = td_acts[1].reshape((1, 1000))
-            # gets the sender's chosen word and the associated probability
-            word_probs, word_selected, word_embedding, selected_word_prob = sender.forward(
-            target_acts, distractor_acts)
-            print("AgnosticSender sent {} with a chance of {} for image {}".format(vocab[word_selected],
-            selected_word_prob,target_class))
-            # gets the random sender's chosen word and the associated probability
-            random_word_probs, random_word_selected, random_word_embedding, random_selected_word_prob = random_sender.forward(
-            target_acts, distractor_acts)
-            print("RandomSender sent {} with a chance of {} for image {}".format(vocab[random_word_selected],
-            random_selected_word_prob,target_class))
+            # number of items in the batch
+            for index, item in zip(range(mini_batch_size), train_loader):
+                # gets a new target/distractor pair from the data set
+                target_image, distractor_image = item[0], item[1]
+                # reshapes images into expected shape for VGG model
+                target_image = target_image.reshape((1, 3, 224, 224))
+                distractor_image = distractor_image.reshape((1, 3, 224, 224))
+                # vertically stacks numpy array of image
+                td_images = np.vstack([target_image, distractor_image])
+                # gets actual classifications from prediction of vgg model
+                td_images_tensor = torch.from_numpy(td_images)
+                td_acts = model(td_images_tensor)
+                # reshapes predictions into expected shape
+                target_acts = td_acts[0].reshape((1, 1000))
+                distractor_acts = td_acts[1].reshape((1, 1000))
+                # target_acts = model(target_image).reshape(1,1000)
+                # distractor_acts = model(distractor_image).reshape(1,1000)
 
-            # gets the target image
-            # TODO: check if this can be modified for more than 2 images
-            reordering = np.array([0,1])
-            random.shuffle(reordering)
-            target = np.where(reordering==0)[0]
-            # sets images as predictions
-            img_array = [target_acts, distractor_acts]
-            im1_acts, im2_acts = [img_array[reordering[i]]
-            for i, img in enumerate(img_array)]
-            # gets the receiver's chosen target and associated probability
-            receiver_probs, image_selected, selected_image_prob = receiver.forward(
-            im1_acts, im2_acts, word_embedding)
-            # gets the random receiver's chosen target and associated probability
-            random_receiver_probs, random_image_selected, random_selected_image_prob = random_receiver.forward(
-            im1_acts, im2_acts, word_embedding)
+                # gets the sender's chosen word and the associated probability
+                word_probs, word_selected, word_embedding, selected_word_prob = sender.forward(
+                target_acts, distractor_acts)
+                print("AgnosticSender sent {} with a chance of {}".format(vocab[word_selected],
+                selected_word_prob))
+                # gets the random sender's chosen word and the associated probability
+                random_word_probs, random_word_selected, random_word_embedding, random_selected_word_prob = random_sender.forward(
+                target_acts, distractor_acts)
+                print("RandomSender sent {} with a chance of {}".format(vocab[random_word_selected],
+                random_selected_word_prob))
 
-            print("Receiver chose image {} with a chance of {}, target was image {}".format(image_selected, selected_image_prob, target))
-            print("Random Receiver chose image {} with a chance of {}, target was image {}".format(random_image_selected, random_selected_image_prob, target))
-            # gives a payoff if the target is the same as the selected image
-            reward = 0.0
-            if target == image_selected:
-                reward = 1.0
-                successes += 1
-                print("Success! Payoff of {}".format(reward))
+                # gets the target image
+                # TODO: check if this can be modified for more than 2 images
+                reordering = np.array([0,1])
+                random.shuffle(reordering)
+                target = np.where(reordering==0)[0]
+                # sets images as predictions
+                img_array = [target_acts, distractor_acts]
+                im1_acts, im2_acts = [img_array[reordering[i]]
+                for i, img in enumerate(img_array)]
+                # gets the receiver's chosen target and associated probability
+                receiver_probs, image_selected, selected_image_prob = receiver.forward(
+                im1_acts, im2_acts, word_embedding)
+                # gets the random receiver's chosen target and associated probability
+                random_receiver_probs, random_image_selected, random_selected_image_prob = random_receiver.forward(
+                im1_acts, im2_acts, word_embedding)
 
-            random_reward = 0.0
-            if target == random_image_selected:
-                random_reward = 1.0
-                random_successes += 1
-                print("Random success! Payoff of {}".format(reward))
+                print("Receiver chose image {} with a chance of {}, target was image {}".format(image_selected, selected_image_prob, target))
+                print("Random Receiver chose image {} with a chance of {}, target was image {}".format(random_image_selected, random_selected_image_prob, target))
+                # gives a payoff if the target is the same as the selected image
+                reward = 0.0
+                if target == image_selected:
+                    reward = 1.0
+                    successes += 1
+                    print("Success! Payoff of {}".format(reward))
 
-            shuffled_acts = np.concatenate([im1_acts, im2_acts])
-            # adds the game just played to the batch
-            batch.append(Game(shuffled_acts, target_acts, distractor_acts,
-            word_probs, receiver_probs, target, word_selected, image_selected,
-            reward, selected_word_prob, selected_image_prob))
-            # update the weights after the batch update
-            # if (i+1) % mini_batch_size == 0:
-            #     comm_succ = successes / (i + 1) * 100
-            #     print('Total comm_succ : {}%'.format(comm_succ))
-            #     print('Updating the agent weights')
-            #     agents.update(batch)
-            #     # reset the batch after one update
-            #     batch = []
-            # total_reward += reward
+                random_reward = 0.0
+                if target == random_image_selected:
+                    random_reward = 1.0
+                    random_successes += 1
+                    print("Random success! Payoff of {}".format(reward))
 
-            # stochastic update, no batch
-            current_comm_succ = successes / (i + 1) * 100
-            random_current_comm_succ = random_successes / (i + 1) * 100
-            comm_succ.append(current_comm_succ)
-            random_comm_succ.append(random_current_comm_succ)
-            print('Total communication success : {}%'.format(current_comm_succ))
-            print('Total random communication success : {}%'.format(random_current_comm_succ))
-            print('Updating the agent weights')
-            # agents.update(Game(shuffled_acts, target_acts, distractor_acts,
-            # word_probs, receiver_probs, target, word_selected, image_selected,
-            # reward, selected_word_prob, selected_image_prob))
-            sender_optimizer.zero_grad()
-            receiver_optimizer.zero_grad()
+                shuffled_acts = np.concatenate([im1_acts, im2_acts])
+                # adds the game just played to the batch
+                batch.append(Game(shuffled_acts, target_acts, distractor_acts,
+                word_probs, receiver_probs, target, word_selected, image_selected,
+                reward, selected_word_prob, selected_image_prob))
+                # update the weights after the batch update
+                # if (i+1) % mini_batch_size == 0:
+                #     comm_succ = successes / (i + 1) * 100
+                #     print('Total comm_succ : {}%'.format(comm_succ))
+                #     print('Updating the agent weights')
+                #     agents.update(batch)
+                #     # reset the batch after one update
+                #     batch = []
+                # total_reward += reward
 
-            # calculates loss for agents
-            sender_loss_value = sender_loss(selected_word_prob, reward)
-            print("Sender loss {}".format(sender_loss_value))
-            sender_loss_value.backward()
+                # stochastic update, no batch
+                current_comm_succ = successes / (i + 1) * 100
+                random_current_comm_succ = random_successes / (i + 1) * 100
+                comm_succ.append(current_comm_succ)
+                random_comm_succ.append(random_current_comm_succ)
+                print('Total communication success : {}%'.format(current_comm_succ))
+                print('Total random communication success : {}%'.format(random_current_comm_succ))
+                print('Updating the agent weights')
+                # agents.update(Game(shuffled_acts, target_acts, distractor_acts,
+                # word_probs, receiver_probs, target, word_selected, image_selected,
+                # reward, selected_word_prob, selected_image_prob))
+                sender_optimizer.zero_grad()
+                receiver_optimizer.zero_grad()
 
-            receiver_loss_value = receiver_loss(selected_image_prob, reward)
-            print("Receiver loss {}".format(receiver_loss_value))
-            receiver_loss_value.backward()
+                # calculates loss for agents
+                sender_loss_value = sender_loss(selected_word_prob, reward)
+                print("Sender loss {}".format(sender_loss_value))
+                sender_loss_value.backward()
 
-            # applies gradient descent backwards
-            sender_optimizer.step()
-            receiver_optimizer.step()
+                receiver_loss_value = receiver_loss(selected_image_prob, reward)
+                print("Receiver loss {}".format(receiver_loss_value))
+                receiver_loss_value.backward()
+
+                # applies gradient descent backwards
+                sender_optimizer.step()
+                receiver_optimizer.step()
 
         if (display_comm_succ):
             display_comm_succ_graph({"agnostic sender, default receiver":comm_succ, "random sender, random receiver" : random_comm_succ})
