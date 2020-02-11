@@ -6,7 +6,6 @@ from architectures.senders.AgnosticSender import AgnosticSender
 from architectures.receivers.Receiver import Receiver
 from architectures.senders.RandomSender import RandomSender
 from architectures.receivers.RandomReceiver import RandomReceiver
-import env
 import random
 import torch
 import sys
@@ -97,6 +96,7 @@ def run_game(config, device):
 
     batch = []
     total_reward = 0
+    total_random_reward = 0
     successes = 0
     random_successes = 0
     comm_succ = []
@@ -126,9 +126,6 @@ def run_game(config, device):
                 # reshapes predictions into expected shape
                 target_acts = td_acts[0].reshape((1, 1000))
                 distractor_acts = td_acts[1].reshape((1, 1000))
-                # target_acts = model(target_image).reshape(1,1000)
-                # distractor_acts = model(distractor_image).reshape(1,1000)
-
                 # gets the sender's chosen word and the associated probability
                 word_probs, word_selected, word_embedding, selected_word_prob = sender.forward(
                 target_acts, distractor_acts)
@@ -176,7 +173,7 @@ def run_game(config, device):
                 batch.append(Game(shuffled_acts, target_acts, distractor_acts,
                 word_probs, receiver_probs, target, word_selected, image_selected,
                 reward, selected_word_prob, selected_image_prob))
-                # update the weights after the batch update
+                #TO DO: reimplement mini batch descent
                 # if (i+1) % mini_batch_size == 0:
                 #     comm_succ = successes / (i + 1) * 100
                 #     print('Total comm_succ : {}%'.format(comm_succ))
@@ -194,11 +191,10 @@ def run_game(config, device):
                 print('Total communication success : {}%'.format(current_comm_succ))
                 print('Total random communication success : {}%'.format(random_current_comm_succ))
                 print('Updating the agent weights')
-                # agents.update(Game(shuffled_acts, target_acts, distractor_acts,
-                # word_probs, receiver_probs, target, word_selected, image_selected,
-                # reward, selected_word_prob, selected_image_prob))
                 sender_optimizer.zero_grad()
                 receiver_optimizer.zero_grad()
+                total_reward += 1
+                random_reward += 1
 
                 # calculates loss for agents
                 sender_loss_value = sender_loss(selected_word_prob, reward)
