@@ -16,8 +16,8 @@ log_path: logs
 
 data_dir: data
 image_dirs:
-    - cat-10
-    - dog-10
+    - cat-1
+    - dog-1
 vocab:
     - catword
     - dogword

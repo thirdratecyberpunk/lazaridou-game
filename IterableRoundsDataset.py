@@ -9,6 +9,7 @@ from itertools import islice, chain, cycle
 import os
 import numpy as np
 from display import plot_figures
+from itertools import repeat
 
 class IterableRoundsDataset(IterableDataset):
 
@@ -17,7 +18,7 @@ class IterableRoundsDataset(IterableDataset):
         self.data_dir = data_dir
         self.data_list = []
         self.batch_size = batch_size
-        self.transform =  transform = transforms.Compose(
+        self.transform = transforms.Compose(
             [
             transforms.Resize((256,256)),
             transforms.RandomCrop(224),
@@ -37,26 +38,34 @@ class IterableRoundsDataset(IterableDataset):
             random.shuffle(i)
         return self.data_list
 
-    def process_data(self, data):
+    def process_data(self, category, data):
         """
         Takes in an array of image filenames and yields a generator of
         transformed tensors
         """
-        for x in data:
-            image = Image.open(x)
-            image = self.transform(image)
-            arr = np.array(image)
-            yield arr
+        image = Image.open(data)
+        image = self.transform(image)
+        arr = np.array(image)
+        yield {"arr" : arr, "category": category}
 
     def get_stream(self, data_list):
         """
         Returns a chain object from an iterator that applies the transformation
         to the lists of filenames
         """
-        return chain.from_iterable(map(self.process_data, cycle(data_list)))
+        print(data_list)
+        return chain.from_iterable(map(self.process_data, repeat(data_list[0]), data_list[1]))
 
     def get_streams(self):
-        return zip(*[self.get_stream([list]) for list in self.shuffled_sublists])
+        """
+        Returns a iterable zip object of the chain streams of sublists
+        """
+        # enumerates list to get categories for each stream
+        # [(0, [1,2,3,...]), (1, [1,2,3,...])]
+        categorised_sublists = list(enumerate(cycle(x) for x in self.shuffled_sublists))
+        # gives a tuple containing the category and the cycle of filenames to get_stream
+        return zip(*[self.get_stream(list) for list in categorised_sublists])
+        # return zip(*[self.get_stream([list]) for list in self.shuffled_sublists])
 
     def __iter__(self):
         return self.get_streams()
@@ -65,7 +74,7 @@ def main():
 
     random.seed(0)
 
-    img_dirs = ["dog-10", "cat-10"]
+    img_dirs = ["dog-1", "cat-1"]
     data_dir = "data"
 
     iterable_dataset = IterableRoundsDataset(img_dirs, data_dir, batch_size = 2)
@@ -74,8 +83,8 @@ def main():
 
     for batch in islice(loader, 5):
             # reshapes the image tensor into the expected shape
-            target_display = batch[0].reshape(224, 224, 3)
-            distractor_display = batch[1].reshape(224, 224, 3)
+            target_display = batch[0]["arr"].reshape(224, 224, 3)
+            distractor_display = batch[1]["arr"].reshape(224, 224, 3)
 
             figures = [target_display, distractor_display]
             plot_figures(figures, 1, 2)
