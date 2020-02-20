@@ -80,7 +80,7 @@ def run_game(config, device):
 
     # creates "perfect" sender and a normal receiver to test whether the receiver is learning at all
     perfect_sender = PerfectSender(vocab = vocab, input_dim = 1000, h_units= image_embedding_dim, image_embedding_dim= image_embedding_dim)
-    receiver = Receiver(1000, image_embedding_dim, word_embedding_dim= word_embedding_dim)
+    receiver = Receiver(1000, image_embedding_dim, image_embedding_dim= image_embedding_dim, word_embedding_dim= word_embedding_dim)
 
     receiver_optimizer = Adam(receiver.parameters(), lr=learning_rate, weight_decay = weight_decay)
 

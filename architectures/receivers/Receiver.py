@@ -11,7 +11,7 @@ from torch.nn import CrossEntropyLoss, NLLLoss
 # agent that receives a single word in the vocabulary from the sender
 # sends a single image embedding which it thinks is the target image
 class Receiver(Module):
-  def __init__(self, input_dim=32, h_units=32, word_embedding_dim=2):
+  def __init__(self, input_dim=32, h_units=32, image_embedding_dim=2, word_embedding_dim=2):
       super(Receiver, self).__init__()
       # has a single layer to embed the images
       self.linear1 = Linear(input_dim, h_units)
@@ -21,6 +21,8 @@ class Receiver(Module):
       self.sig = Sigmoid()
       # defines softmax function
       self.softmax = Softmax()
+      # embedding layer for images into game-specific space
+      self.add_module("image_embedding", Embedding(input_dim, image_embedding_dim))
       # embedding layer for vocabulary
       self.add_module("vocab_embedding", Embedding(input_dim, word_embedding_dim))
 
@@ -28,7 +30,9 @@ class Receiver(Module):
        """
        Embeds a given image representation into a game specific space
        """
-       input = torch.matmul(inputs, self.linear1.weight)
+    #    input = torch.matmul(inputs, self.linear1.weight)
+       in_long = inputs.long() 
+       input = self.image_embedding(in_long) 
        embed = self.sig(input)
        return embed
 
@@ -46,10 +50,12 @@ class Receiver(Module):
       # word_embed = Receiver.embed_image_to_gss(self, word)
       # computes dot product between symbol and images
       im1_mm = torch.mul(im1_embed, word_embed)
-      im1_score = torch.sum(im1_mm, dim=1).numpy()[0]
+      im1_score = np.sum(torch.sum(im1_mm, dim=1).numpy()[0])
 
       im2_mm = torch.mul(im2_embed, word_embed)
-      im2_score = torch.sum(im2_mm, dim=1).numpy()[0]
+      im2_score = np.sum(torch.sum(im2_mm, dim=1).numpy()[0])
+
+      print(im1_score, im2_score)
 
       scores = torch.FloatTensor([im1_score, im2_score])
       # converts dot products into Gibbs distribution
