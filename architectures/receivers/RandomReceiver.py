@@ -3,7 +3,7 @@ import sys
 import numpy as np
 import torch
 from torch.optim import Adam
-from torch.nn import Sigmoid, Softmax, Module, Linear
+from torch.nn import Sigmoid, Softmax, Module, Linear, Embedding
 import torch.nn.init as Init
 from torch.autograd import Variable
 from torch.nn import CrossEntropyLoss, NLLLoss
@@ -12,7 +12,7 @@ from torch.nn import CrossEntropyLoss, NLLLoss
 # sends a single image embedding which it thinks is the target image
 # in this case, will also randomly choose the image
 class RandomReceiver(Module):
-  def __init__(self, input_dim=32, h_units=32):
+  def __init__(self, input_dim=32, h_units=32, word_embedding_dim=2):
       super(RandomReceiver, self).__init__()
       # has a single layer to embed the images
       self.linear1 = Linear(input_dim, h_units, bias=None)
@@ -22,6 +22,8 @@ class RandomReceiver(Module):
       self.sig = Sigmoid()
       # defines softmax function
       self.softmax = Softmax()
+      # embedding layer for vocabulary
+      self.add_module("vocab_embedding", Embedding(input_dim, word_embedding_dim))
 
   def embed_image_to_gss(self, inputs):
        """
@@ -31,22 +33,7 @@ class RandomReceiver(Module):
        embed = self.sig(input)
        return embed
 
-  def forward(self, image_1, image_2, word_embed):
-      # embeds images into game specific space
-      im1_embed = RandomReceiver.embed_image_to_gss(self, image_1)
-      im2_embed = RandomReceiver.embed_image_to_gss(self, image_2)
-      # embeds symbol given as vector into game specific space
-      # word_embed = torch.squeeze(vocab_embedding[word])
-      # print(word)
-      # word_embed = RandomReceiver.embed_image_to_gss(self, word)
-      # computes dot product between symbol and images
-      im1_mm = torch.mul(im1_embed, word_embed)
-      im1_score = torch.sum(im1_mm, dim=1).numpy()[0]
-
-      im2_mm = torch.mul(im2_embed, word_embed)
-      im2_score = torch.sum(im2_mm, dim=1).numpy()[0]
-
-      scores = torch.FloatTensor([im1_score, im2_score])
+  def forward(self, image_1, image_2, word):
       # converts dot products into Gibbs distribution
       image_probs = [0.5, 0.5]
       # choose image by sampling from Gibbs distribution

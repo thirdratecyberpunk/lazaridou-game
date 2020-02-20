@@ -31,7 +31,7 @@ class WordProbabilityModel(Module):
 # and sends a single word from the vocabulary
 class AgnosticSender(Module):
   # def __init__(self, image_embedding_dim, input_dim=32, h_units=32):
-  def __init__(self, vocab, input_dim=32, h_units=32, image_embedding_dim=2, word_embedding_dim=2):
+  def __init__(self, vocab, input_dim=32, h_units=32, image_embedding_dim=2):
       super(AgnosticSender, self).__init__()
       self.vocab = vocab
       # has a single linear layer to embed the images
@@ -44,8 +44,6 @@ class AgnosticSender(Module):
       self.add_module("word_prediction_model", WordProbabilityModel(image_embedding_dim))
       # embedding layer for images into game-specific space
       self.add_module("image_embedding", Embedding(input_dim, image_embedding_dim))
-      # embedding layer for vocabulary
-      self.add_module("vocab_embedding", Embedding(input_dim, word_embedding_dim))
 
   def embed_image_to_gss(self, inputs):
       """
@@ -67,8 +65,6 @@ class AgnosticSender(Module):
       word_probs = self.word_prediction_model.forward(ordered_embed_tensor).numpy()[0]
       # chooses a word to send by sampling from the probability distribution
       word = np.random.choice(np.arange(len(self.vocab)), p=word_probs)
-      # samples the word from the vocabulary embedding
-      word_embedding = self.vocab_embedding(torch.tensor(word))
       # returns the chosen word, the probability distribution and the
       # probability of choosing that word
-      return word_probs, word, word_embedding, word_probs[word]
+      return word_probs, word, word_probs[word]

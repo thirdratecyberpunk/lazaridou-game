@@ -59,8 +59,6 @@ class RandomSender(Module):
       word_probs = [0.5, 0.5]
       # chooses a word to send by sampling from the probability distribution
       word = np.random.choice(np.arange(len(self.vocab)), p=word_probs)
-      # samples the word from the vocabulary embedding
-      word_embedding = self.vocab_embedding(torch.tensor(word))
       # returns the chosen word, the probability distribution and the
       # probability of choosing that word
-      return word_probs, word, word_embedding, word_probs[word]
+      return word_probs, word, word_probs[word]

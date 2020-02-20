@@ -79,8 +79,8 @@ def run_game(config, device):
     # random_receiver = RandomReceiver(1000, image_embedding_dim)
 
     # creates "perfect" sender and a normal receiver to test whether the receiver is learning at all
-    perfect_sender = PerfectSender(vocab = vocab, input_dim = 1000, h_units= image_embedding_dim, image_embedding_dim= image_embedding_dim, word_embedding_dim= word_embedding_dim)
-    receiver = Receiver(1000, image_embedding_dim)
+    perfect_sender = PerfectSender(vocab = vocab, input_dim = 1000, h_units= image_embedding_dim, image_embedding_dim= image_embedding_dim)
+    receiver = Receiver(1000, image_embedding_dim, word_embedding_dim= word_embedding_dim)
 
     receiver_optimizer = Adam(receiver.parameters(), lr=learning_rate, weight_decay = weight_decay)
 
@@ -134,7 +134,7 @@ def run_game(config, device):
                 distractor_acts = td_acts[1].reshape((1, 1000))
 
                 # gets the perfect sender's chosen word
-                word_probs, word_selected, word_embedding, selected_word_prob = perfect_sender.forward(
+                word_probs, word_selected, selected_word_prob = perfect_sender.forward(
                 target_acts, distractor_acts, target_category)
 
                 print("Perfect sender sent {}".format(vocab[word_selected]))
@@ -163,7 +163,8 @@ def run_game(config, device):
                 for i, img in enumerate(img_array)]
                 # gets the receiver's chosen target and associated probability
                 receiver_probs, image_selected, selected_image_prob = receiver.forward(
-                im1_acts, im2_acts, word_embedding)
+                im1_acts, im2_acts, word_selected)
+                print(receiver_probs)
                 # gets the random receiver's chosen target and associated probability
                 # random_receiver_probs, random_image_selected, random_selected_image_prob = random_receiver.forward(
                 # im1_acts, im2_acts, word_embedding)
