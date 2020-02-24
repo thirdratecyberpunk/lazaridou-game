@@ -62,26 +62,14 @@ def run_game(config, device):
     display_comm_succ = config['display_comm_succ']
     # number of words in the vocabulary
     vocab_len = len(vocab)
-    # creates sender/receiver agents which are used to populate the game
-    # sender = AgnosticSender(vocab = vocab, input_dim = 1000, h_units= image_embedding_dim, image_embedding_dim= image_embedding_dim, word_embedding_dim= word_embedding_dim)
-    # receiver = Receiver(1000, image_embedding_dim)
-
-    # # define the loss policy for agents
-    # sender_loss = LossPolicy()
-    receiver_loss = LossPolicy()
-
-    # # creates optimisers for agents
-    # sender_optimizer = Adam(sender.parameters(), lr=learning_rate, weight_decay = weight_decay)
-    # receiver_optimizer = Adam(receiver.parameters(), lr=learning_rate, weight_decay = weight_decay)
-
-    # creates random agents as a baseline
-    # random_sender = RandomSender(vocab = vocab, input_dim = 1000, h_units= image_embedding_dim, image_embedding_dim= image_embedding_dim, word_embedding_dim= word_embedding_dim)
-    # random_receiver = RandomReceiver(1000, image_embedding_dim)
 
     # creates "perfect" sender and a normal receiver to test whether the receiver is learning at all
-    perfect_sender = PerfectSender(vocab = vocab, input_dim = 1000, h_units= image_embedding_dim, image_embedding_dim= image_embedding_dim)
+    # perfect_sender = PerfectSender(vocab = vocab, input_dim = 1000, h_units= image_embedding_dim, image_embedding_dim= image_embedding_dim)
     receiver = Receiver(1000, image_embedding_dim, image_embedding_dim= image_embedding_dim, word_embedding_dim= word_embedding_dim)
 
+    # defines loss policy for agents
+    receiver_loss = LossPolicy()
+    # defines optimisers
     receiver_optimizer = Adam(receiver.parameters(), lr=learning_rate, weight_decay = weight_decay)
 
     # dataset
@@ -90,7 +78,6 @@ def run_game(config, device):
     # TODO: load in testing data, add testing phase
     # train_data, test_data = train_test_split(dataset, test_size=0.1)
     train_loader = DataLoader(dataset)
-    # test_loader = DataLoader(test_data, batch_size = 5, shuffle=True, num_workers=2)
     # loads the pretrained VGG16 model
     model = models.vgg16()
     # creates a batch to store all game rounds
@@ -134,23 +121,19 @@ def run_game(config, device):
                 distractor_acts = td_acts[1].reshape((1, 1000))
 
                 # gets the perfect sender's chosen word
-                word_probs, word_selected, selected_word_prob = perfect_sender.forward(
-                target_acts, distractor_acts, target_category)
+                # word_probs, word_selected, selected_word_prob = perfect_sender.forward(
+                # target_acts, distractor_acts, target_category)
 
-                print("Perfect sender sent {}".format(vocab[word_selected]))
+                # chooses the target's category (perfect play)
+                word = target_category
+                # as this agent has perfect play, probability is 1 to 0
+                if word == 0:
+                    word_probs = [1,0]
+                else:
+                    word_probs = [0,1]
+                word_selected = target_category
 
-                # TODO: add configurable agent architecture options to config file
-
-                # # gets the sender's chosen word and the associated probability
-                # word_probs, word_selected, word_embedding, selected_word_prob = sender.forward(
-                # target_acts, distractor_acts)
-                # print("AgnosticSender sent {} with a chance of {}".format(vocab[word_selected],
-                # selected_word_prob))
-                # # gets the random sender's chosen word and the associated probability
-                # random_word_probs, random_word_selected, random_word_embedding, random_selected_word_prob = random_sender.forward(
-                # target_acts, distractor_acts)
-                # print("RandomSender sent {} with a chance of {}".format(vocab[random_word_selected],
-                # random_selected_word_prob))
+                print("Perfect sender ssent {}".format(vocab[word_selected]))
 
                 # gets the target image
                 # TODO: check if this can be modified for more than 2 images
@@ -164,10 +147,6 @@ def run_game(config, device):
                 # gets the receiver's chosen target and associated probability
                 receiver_probs, image_selected, selected_image_prob = receiver.forward(
                 im1_acts, im2_acts, word_selected)
-                print(receiver_probs)
-                # gets the random receiver's chosen target and associated probability
-                # random_receiver_probs, random_image_selected, random_selected_image_prob = random_receiver.forward(
-                # im1_acts, im2_acts, word_embedding)
 
                 print("Receiver chose image {} with a chance of {}, target was image {}".format(image_selected, selected_image_prob, target))
                 # print("Random Receiver chose image {} with a chance of {}, target was image {}".format(random_image_selected, random_selected_image_prob, target))
@@ -178,27 +157,14 @@ def run_game(config, device):
                     successes += 1
                     print("Success! Payoff of {}".format(reward))
 
-                # random_reward = 0.0
-                # if target == random_image_selected:
-                #     random_reward = 1.0
-                #     random_successes += 1
-                #     print("Random success! Payoff of {}".format(reward))
-
                 shuffled_acts = np.concatenate([im1_acts, im2_acts])
-                # adds the game just played to the batch
-                batch.append(Game(shuffled_acts, target_acts, distractor_acts,
-                word_probs, receiver_probs, target, word_selected, image_selected,
-                reward, selected_word_prob, selected_image_prob))
-                #TO DO: reimplement mini batch descent
-                # if (i+1) % mini_batch_size == 0:
-                #     comm_succ = successes / (i + 1) * 100
-                #     print('Total comm_succ : {}%'.format(comm_succ))
-                #     print('Updating the agent weights')
-                #     agents.update(batch)
-                #     # reset the batch after one update
-                #     batch = []
-                # total_reward += reward
 
+                # adds the game just played to the batch
+                # batch.append(Game(shuffled_acts, target_acts, distractor_acts,
+                # word_probs, receiver_probs, target, word_selected, image_selected,
+                # reward, selected_word_prob, selected_image_prob))
+
+                #TO DO: reimplement mini batch descent
                 # stochastic update, no batch
                 current_comm_succ = successes / (i + 1) * 100
                 # random_current_comm_succ = random_successes / (i + 1) * 100
@@ -210,24 +176,17 @@ def run_game(config, device):
                 # sender_optimizer.zero_grad()
                 receiver_optimizer.zero_grad()
                 total_reward += 1
-                # random_reward += 1
 
                 # calculates loss for agents
-                # sender_loss_value = sender_loss(selected_word_prob, reward)
-                # print("Sender loss {}".format(sender_loss_value))
-                # sender_loss_value.backward()
-
                 receiver_loss_value = receiver_loss(selected_image_prob, reward)
                 print("Receiver loss {}".format(receiver_loss_value))
                 receiver_loss_value.backward()
 
                 # applies gradient descent backwards
-                # sender_optimizer.step()
                 receiver_optimizer.step()
 
         if (display_comm_succ):
             display_comm_succ_graph({"perfect sender, default receiver":comm_succ})
-            # display_comm_succ_graph({"agnostic sender, default receiver":comm_succ, "random sender, random receiver" : random_comm_succ})
 
 def main():
 
