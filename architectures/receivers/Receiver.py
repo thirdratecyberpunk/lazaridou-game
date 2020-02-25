@@ -3,7 +3,7 @@ import sys
 import numpy as np
 import torch
 from torch.optim import Adam
-from torch.nn import Sigmoid, Softmax, Module, Linear, Embedding
+from torch.nn import Sigmoid, Softmax, Module, Linear, Embedding, Parameter
 import torch.nn.init as Init
 from torch.autograd import Variable
 from torch.nn import CrossEntropyLoss, NLLLoss
@@ -16,11 +16,13 @@ class Receiver(Module):
       # has a single layer to embed the images
       self.linear1 = Linear(input_dim, h_units)
       # defines weights as a new tensor
-      self.linear1.weight = torch.nn.Parameter(torch.empty(input_dim, h_units).normal_(mean=0.0, std=0.01), requires_grad=True)
+      self.linear1.weight = Parameter(torch.empty(input_dim, h_units).normal_(mean=0.0, std=0.01), requires_grad=True)      
       # defines sigmoid function
       self.sig = Sigmoid()
       # defines softmax function
       self.softmax = Softmax()
+
+      # TODO: check if these layers are initialised correctly
       # embedding layer for images into game-specific space
       self.add_module("image_embedding", Embedding(input_dim, image_embedding_dim))
       # embedding layer for vocabulary
@@ -30,9 +32,14 @@ class Receiver(Module):
        """
        Embeds a given image representation into a game specific space
        """
+       # PROBLEM IS CONVERTING FLOAT TO LONG
+    #    in_long = inputs.type(torch.LongTensor)
+    #    input = self.image_embedding(in_long) 
+    #    embed = self.sig(input)
+       print(inputs.size())
+       input = inputs.view(-1, self.linear1.in_features) 
+       input = self.linear1(input)
     #    input = torch.matmul(inputs, self.linear1.weight)
-       in_long = inputs.long() 
-       input = self.image_embedding(in_long) 
        embed = self.sig(input)
        return embed
 
@@ -55,9 +62,8 @@ class Receiver(Module):
       im2_mm = torch.mul(im2_embed, word_embed)
       im2_score = np.sum(torch.sum(im2_mm, dim=1).numpy()[0])
 
-      print(im1_score, im2_score)
-
       scores = torch.FloatTensor([im1_score, im2_score])
+      print(scores)
       # converts dot products into Gibbs distribution
       image_probs = self.softmax(scores).numpy()
       # choose image by sampling from Gibbs distribution

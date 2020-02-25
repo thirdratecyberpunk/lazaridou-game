@@ -119,11 +119,6 @@ def run_game(config, device):
                 # reshapes predictions into expected shape
                 target_acts = td_acts[0].reshape((1, 1000))
                 distractor_acts = td_acts[1].reshape((1, 1000))
-
-                # gets the perfect sender's chosen word
-                # word_probs, word_selected, selected_word_prob = perfect_sender.forward(
-                # target_acts, distractor_acts, target_category)
-
                 # chooses the target's category (perfect play)
                 word = target_category
                 # as this agent has perfect play, probability is 1 to 0
@@ -133,7 +128,7 @@ def run_game(config, device):
                     word_probs = [0,1]
                 word_selected = target_category
 
-                print("Perfect sender ssent {}".format(vocab[word_selected]))
+                print("Perfect sender sent {}".format(vocab[word_selected]))
 
                 # gets the target image
                 # TODO: check if this can be modified for more than 2 images
