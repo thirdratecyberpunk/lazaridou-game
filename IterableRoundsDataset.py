@@ -53,7 +53,6 @@ class IterableRoundsDataset(IterableDataset):
         Returns a chain object from an iterator that applies the transformation
         to the lists of filenames
         """
-        print(data_list)
         return chain.from_iterable(map(self.process_data, repeat(data_list[0]), data_list[1]))
 
     def get_streams(self):

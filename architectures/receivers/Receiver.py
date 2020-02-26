@@ -16,7 +16,8 @@ class Receiver(Module):
       # has a single layer to embed the images
       self.linear1 = Linear(input_dim, h_units)
       # defines weights as a new tensor
-      self.linear1.weight = Parameter(torch.empty(input_dim, h_units).normal_(mean=0.0, std=0.01), requires_grad=True)      
+      self.linear1.weight = Parameter(torch.rand(input_dim, h_units), requires_grad=True) 
+    #   self.linear1.weight = Parameter(torch.empty(input_dim, h_units).normal_(mean=0.0, std=0.01), requires_grad=True)      
       # defines sigmoid function
       self.sig = Sigmoid()
       # defines softmax function
@@ -36,12 +37,11 @@ class Receiver(Module):
     #    in_long = inputs.type(torch.LongTensor)
     #    input = self.image_embedding(in_long) 
     #    embed = self.sig(input)
-       print(inputs.size())
-       input = inputs.view(-1, self.linear1.in_features) 
-       input = self.linear1(input)
-    #    input = torch.matmul(inputs, self.linear1.weight)
-       embed = self.sig(input)
-       return embed
+    #    input = inputs.view(-1, self.linear1.in_features) 
+    #    input = self.linear1(input)
+       input = torch.matmul(inputs, self.linear1.weight)
+    #    embed = self.sig(input)
+       return input
 
   def forward(self, image_1, image_2, word):
       """

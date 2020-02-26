@@ -63,10 +63,13 @@ def run_game(config, device):
     # number of words in the vocabulary
     vocab_len = len(vocab)
 
-    # creates "perfect" sender and a normal receiver to test whether the receiver is learning at all
-    # perfect_sender = PerfectSender(vocab = vocab, input_dim = 1000, h_units= image_embedding_dim, image_embedding_dim= image_embedding_dim)
+    # creates normal receiver, implementing a "perfect" sender in the game loop
     receiver = Receiver(1000, image_embedding_dim, image_embedding_dim= image_embedding_dim, word_embedding_dim= word_embedding_dim)
 
+    for name, param in receiver.state_dict().items():
+        print(name, param)
+
+    # sys.exit(1)
     # defines loss policy for agents
     receiver_loss = LossPolicy()
     # defines optimisers
@@ -86,12 +89,8 @@ def run_game(config, device):
     "word_probs", "image_probs", "target", "word", "selection", "reward", "selected_word_prob", "selected_image_prob"])
 
     batch = []
-    total_reward = 0
-    # total_random_reward = 0
     successes = 0
-    # random_successes = 0
     comm_succ = []
-    # random_comm_succ = []
 
     with torch.no_grad():
 
@@ -154,31 +153,22 @@ def run_game(config, device):
 
                 shuffled_acts = np.concatenate([im1_acts, im2_acts])
 
-                # adds the game just played to the batch
-                # batch.append(Game(shuffled_acts, target_acts, distractor_acts,
-                # word_probs, receiver_probs, target, word_selected, image_selected,
-                # reward, selected_word_prob, selected_image_prob))
-
                 #TO DO: reimplement mini batch descent
                 # stochastic update, no batch
                 current_comm_succ = successes / (i + 1) * 100
-                # random_current_comm_succ = random_successes / (i + 1) * 100
                 comm_succ.append(current_comm_succ)
-                # random_comm_succ.append(random_current_comm_succ)
                 print('Total communication success : {}%'.format(current_comm_succ))
-                # print('Total random communication success : {}%'.format(random_current_comm_succ))
                 print('Updating the agent weights')
-                # sender_optimizer.zero_grad()
-                receiver_optimizer.zero_grad()
-                total_reward += 1
-
                 # calculates loss for agents
                 receiver_loss_value = receiver_loss(selected_image_prob, reward)
-                print("Receiver loss {}".format(receiver_loss_value))
+                # zeroes gradients
+                receiver_optimizer.zero_grad()
+                print("Receiver loss {}".format(receiver_loss_value.item()))
                 receiver_loss_value.backward()
 
                 # applies gradient descent backwards
                 receiver_optimizer.step()
+                print(receiver.linear1.weight)
 
         if (display_comm_succ):
             display_comm_succ_graph({"perfect sender, default receiver":comm_succ})
