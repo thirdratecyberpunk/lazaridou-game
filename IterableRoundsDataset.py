@@ -82,8 +82,9 @@ def main():
 
     for batch in islice(loader, 5):
             # reshapes the image tensor into the expected shape
-            target_display = batch[0]["arr"].reshape(224, 224, 3)
-            distractor_display = batch[1]["arr"].reshape(224, 224, 3)
+            print(batch[0]["arr"].shape)
+            target_display = batch[0]["arr"].permute(1, 2, 0)
+            distractor_display = batch[1]["arr"].permute(1, 2, 0)
 
             figures = [target_display, distractor_display]
             plot_figures(figures, 1, 2)
