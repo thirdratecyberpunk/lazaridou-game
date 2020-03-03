@@ -26,11 +26,12 @@ import numpy as np
 from display import plot_figures
 from itertools import repeat
 
+from display import plot_figures, display_comm_succ_graph
 
 
 random.seed(0)
 
-img_dirs = ["dog", "cat"]
+img_dirs = ["cat", "dog"]
 data_dir = "data"
 
 iterable_dataset = IterableRoundsDataset(img_dirs, data_dir, batch_size = 2)
@@ -52,13 +53,25 @@ class Receiver(nn.Module):
         super(Receiver, self).__init__()
         self.img_linear = nn.Linear(img_embed_dim, game_embed_dim)
         self.word_linear = nn.Linear(word_dict_dim, game_embed_dim)
-        
+        self.softmax = nn.Softmax()
+
     def forward(self, im1, im2, w):
+        """
+        Chooses an image by calculating scores
+        Takes the target and distractor vectors, and the word symbol
+        as a one-hot vector over the vocabulary
+        """
         im1_emb = self.img_linear(im1)
         im2_emb = self.img_linear(im2)
         w_emb = self.word_linear(w)
         im_emb = torch.stack((im1_emb,im2_emb),dim=2)
-        return torch.einsum('ij,ijk->ik', w_emb, im_emb)
+        scores = torch.einsum('ij,ijk->ik', w_emb, im_emb)
+        scores_no_grad = scores.detach()
+        #   converts dot products into Gibbs distribution
+        prob_distribution = self.softmax(scores_no_grad).numpy()[0]
+        # choose image by sampling from Gibbs distribution
+        selection = np.random.choice(np.arange(2), p=prob_distribution)
+        return scores, prob_distribution, selection
         
 
 receiver = Receiver()
@@ -66,15 +79,28 @@ receiver = Receiver()
 loss = nn.CrossEntropyLoss()
 
 optim_SGD = optim.SGD(receiver.parameters(), lr=0.0001, momentum=0.5)
+# optimizer = optim.Adam(receiver.parameters(), lr = 0.001)
 
-for batch in islice(loader, 5):
+total_rounds = 0
+total_successes = 0
+comm_success_rate = []
+
+for batch in islice(loader, 1000):
+        # displaying the batch as a diagram
+        # target_display = batch[0]["arr"].permute(1, 2, 0)
+        # distractor_display = batch[1]["arr"].permute(1, 2, 0)
+
+        # figures = [target_display, distractor_display]
+        # plot_figures(figures, 1, 2)
+
         # reshapes the image tensor into the expected shape
         target_display = model(batch[0]["arr"][None,:,:,:])
         distractor_display = model(batch[1]["arr"][None,:,:,:])
         
-        
+        # chooses the word as a one hot encoding vector
         w = torch.eye(2)[batch[0]['category']][None,:]
-                
+
+        # shuffles the targets and distractors so receiver doesn't learn target based on position
         if random.random()<0.5:
             im1 = target_display
             im2 = distractor_display
@@ -83,12 +109,31 @@ for batch in islice(loader, 5):
             im2 = target_display
             im1 = distractor_display
             t = 1
-            
+
+        print(f"Round {batch}")
+        print(f"Sender sent word {w} for target {t}")
+
+        # receiver "points" to an image
+        receiver_scores, receiver_prob_distribution, receiver_choice = receiver(im1,im2,w)
+        print(f"Receiver chose {receiver_choice} with a probability of {receiver_prob_distribution[receiver_choice]}")
+
+        # checks if the receiver correctly chose the image
+        if receiver_choice == t:
+            print("Success!")
+            total_successes += 1
+        else:
+            print("Failure")
+        total_rounds += 1
+        comm_success_rate.append(total_successes / total_rounds * 100)
+        # applies backpropagation of loss
         optim_SGD.zero_grad()
-        L = loss(receiver(im1,im2,w), torch.tensor([t]))
+        # optimizer.zero_grad()
+        L = loss(receiver_scores, torch.tensor([t]))
         print(L)
+        print("_______________________________")
         L.backward()
         optim_SGD.step()
+        # optimizer.step()
 
-    
+display_comm_succ_graph({"perfect sender, default receiver":comm_success_rate})
 
