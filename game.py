@@ -1,199 +1,129 @@
-# class responsible for running a sequence of the game
-import sys
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Feb 27 16:33:37 2020
+
+@author: vogiatzg
+@author: blackbul
+"""
+
+import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import torchvision
+
+from torchvision import transforms, utils
+import torchvision.models as models
+from PIL import Image
+import random
+from torch.utils.data import Dataset, IterableDataset, DataLoader
+from itertools import islice, chain, cycle
 import os
 import numpy as np
-from architectures.senders.AgnosticSender import AgnosticSender
-from architectures.receivers.Receiver import Receiver
-from architectures.senders.RandomSender import RandomSender
-from architectures.receivers.RandomReceiver import RandomReceiver
-from architectures.senders.PerfectSender import PerfectSender
-import random
-import torch
-import sys
+from display import plot_figures
+from itertools import repeat
+
 import argparse
-import yaml
-import torchvision.models as models
-from collections import deque, namedtuple
-from torch.optim import Adam
-from torch.autograd import Variable
-from LossPolicy import LossPolicy
-from torch.nn import Embedding
-from display import display_comm_succ_graph
+
+from display import plot_figures, display_comm_succ_graph
 from IterableRoundsDataset import IterableRoundsDataset
-from torch.utils.data import Dataset, DataLoader
+from architectures.receivers.Receiver import Receiver
 
-def shuffle_image_activations(im_acts):
-    reordering = np.array(range(len(im_acts)))
-    random.shuffle(reordering)
-    target_ind = np.argmin(reordering)
-    shuffled = im_acts[reordering]
-    return (shuffled, target_ind)
+parser = argparse.ArgumentParser(description="Train agents to converge upon a language via a referential game.")
+parser.add_argument('--seed', type = int, default = 0, help="Value used as the seed for random generators")
+parser.add_argument('--epochs', type= int, default = 100000, help="Number of epochs to run")
+parser.add_argument('--lr', type=float, default = 0.0001, help="Learning rate")
+parser.add_argument('--word_dict_dim', type=int, default= 2, help="Size of the vocabulary")
 
-def run_game(config, device):
-    # dimensionality of the image embedding
-    image_embedding_dim = config['image_embedding_dim']
-    # dimensionality of the word embedding
-    word_embedding_dim = config['word_embedding_dim']
-    # directory of images
-    data_dir = config['data_dir']
-    # list of all possible classes to load in
-    image_dirs = config['image_dirs']
-    # all possible words in the vocabulary of the agent
-    vocab = config['vocab']
-    # model weights to be passed to the agent
-    model_weights = config['model_weights']
-    # rate at which the agent learns
-    learning_rate = config['learning_rate']
-    # number of iterations to run the game for
-    iterations = config['iterations']
-    # size of batch within batch to sample
-    mini_batch_size = config['mini_batch_size']
-    # size of batch
-    batch_size = config['batch_size']
-    # temperature
-    temperature = config['temperature']
-    # whether the model should be loaded from a pretrained model
-    load_model = config['load_model'] == 'True'
-    # weight decay -> factor that parameters are multiplied by during loss
-    weight_decay = config['weight_decay']
-    # whether round configuration should be displayed as a matplotlib diagram
-    display_rounds = config['display_rounds']
-    # whether results should be displayed as a matplotlib diagram
-    display_comm_succ = config['display_comm_succ']
-    # number of words in the vocabulary
-    vocab_len = len(vocab)
+args = parser.parse_args()
+seed = args.seed
+epochs = args.epochs
+lr = args.lr
+word_dict_dim = args.word_dict_dim
 
-    # creates normal receiver, implementing a "perfect" sender in the game loop
-    receiver = Receiver(1000, image_embedding_dim, image_embedding_dim= image_embedding_dim, word_embedding_dim= word_embedding_dim)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    for name, param in receiver.state_dict().items():
-        print(name, param)
+torch.manual_seed(seed)
+np.random.seed(seed)
+random.seed(seed)
 
-    # sys.exit(1)
-    # defines loss policy for agents
-    receiver_loss = LossPolicy()
-    # defines optimisers
-    receiver_optimizer = Adam(receiver.parameters(), lr=learning_rate, weight_decay = weight_decay)
+img_dirs = ["cat-1", "dog-1"]
+data_dir = "data"
 
-    # dataset
-    dataset = IterableRoundsDataset(image_dirs, data_dir, batch_size = 2)
+iterable_dataset = IterableRoundsDataset(img_dirs, data_dir, batch_size = 2)
 
-    # TODO: load in testing data, add testing phase
-    # train_data, test_data = train_test_split(dataset, test_size=0.1)
-    train_loader = DataLoader(dataset)
-    # loads the pretrained VGG16 model
-    model = models.vgg16()
-    # creates a batch to store all game rounds
-    # mathematical definition of game as explained by Lazaridou
-    Game = namedtuple("Game", ["im_acts", "target_acts", "distractor_acts",
-    "word_probs", "image_probs", "target", "word", "selection", "reward", "selected_word_prob", "selected_image_prob"])
+loader = DataLoader(iterable_dataset, batch_size = None)
 
-    batch = []
-    successes = 0
-    comm_succ = []
+img_embed_dim = 1000
 
-    with torch.no_grad():
+game_embed_dim = 32
 
-        # training process
-        # sender.train()
-        receiver.train()
+model = models.vgg16().to(device)
 
-        # number of training iterations
-        for i in range(iterations):
-            print("Round {}/{}".format(i, iterations), end = "\n")
-            # number of items in the batch
-            for index, item in zip(range(mini_batch_size), train_loader):
-                # gets a new target/distractor pair from the data set
-                target_image, distractor_image = item[0]["arr"], item[1]["arr"]
-                # category information for the perfect sender
-                target_category, distractor_category = item[0]["category"], item[1]["category"]
-                # reshapes images into expected shape for VGG model
-                target_image = target_image.reshape((1, 3, 224, 224))
-                distractor_image = distractor_image.reshape((1, 3, 224, 224))
-                # vertically stacks numpy array of image
-                td_images = np.vstack([target_image, distractor_image])
-                # gets actual classifications from prediction of vgg model
-                td_images_tensor = torch.from_numpy(td_images)
-                td_acts = model(td_images_tensor)
-                # reshapes predictions into expected shape
-                target_acts = td_acts[0].reshape((1, 1000))
-                distractor_acts = td_acts[1].reshape((1, 1000))
-                # chooses the target's category (perfect play)
-                word = target_category
-                # as this agent has perfect play, probability is 1 to 0
-                if word == 0:
-                    word_probs = [1,0]
-                else:
-                    word_probs = [0,1]
-                word_selected = target_category
+receiver = Receiver(img_embed_dim, game_embed_dim, word_dict_dim).to(device)
 
-                print("Perfect sender sent {}".format(vocab[word_selected]))
+loss = nn.CrossEntropyLoss()
 
-                # gets the target image
-                # TODO: check if this can be modified for more than 2 images
-                reordering = np.array([0,1])
-                random.shuffle(reordering)
-                target = np.where(reordering==0)[0]
-                # sets images as predictions
-                img_array = [target_acts, distractor_acts]
-                im1_acts, im2_acts = [img_array[reordering[i]]
-                for i, img in enumerate(img_array)]
-                # gets the receiver's chosen target and associated probability
-                receiver_probs, image_selected, selected_image_prob = receiver.forward(
-                im1_acts, im2_acts, word_selected)
+# TODO: try using Adam as the optimizer rather than stochastic gradient descent
+optim_SGD = optim.SGD(receiver.parameters(), lr=lr, momentum=0.5)
+# optimizer = optim.Adam(receiver.parameters(), lr = 0.001)
 
-                print("Receiver chose image {} with a chance of {}, target was image {}".format(image_selected, selected_image_prob, target))
-                # print("Random Receiver chose image {} with a chance of {}, target was image {}".format(random_image_selected, random_selected_image_prob, target))
-                # gives a payoff if the target is the same as the selected image
-                reward = 0.0
-                if target == image_selected:
-                    reward = 1.0
-                    successes += 1
-                    print("Success! Payoff of {}".format(reward))
+total_rounds = 0
+total_successes = 0
+comm_success_rate = []
+num_rounds = 1
 
-                shuffled_acts = np.concatenate([im1_acts, im2_acts])
+vocabulary = torch.eye(word_dict_dim)
 
-                #TO DO: reimplement mini batch descent
-                # stochastic update, no batch
-                current_comm_succ = successes / (i + 1) * 100
-                comm_succ.append(current_comm_succ)
-                print('Total communication success : {}%'.format(current_comm_succ))
-                print('Updating the agent weights')
-                # calculates loss for agents
-                receiver_loss_value = receiver_loss(selected_image_prob, reward)
-                # zeroes gradients
-                receiver_optimizer.zero_grad()
-                print("Receiver loss {}".format(receiver_loss_value.item()))
-                receiver_loss_value.backward()
+for batch in islice(loader, epochs):
+        # displaying the batch as a diagram
+        # target_display = batch[0]["arr"].permute(1, 2, 0)
+        # distractor_display = batch[1]["arr"].permute(1, 2, 0)
 
-                # applies gradient descent backwards
-                receiver_optimizer.step()
-                print(receiver.linear1.weight)
+        # figures = [target_display, distractor_display]
+        # plot_figures(figures, 1, 2)
 
-        if (display_comm_succ):
-            display_comm_succ_graph({"perfect sender, default receiver":comm_succ})
+        # reshapes the image tensor into the expected shape
+        target_display = model(batch[0]["arr"][None,:,:,:].to(device))
+        distractor_display = model(batch[1]["arr"][None,:,:,:].to(device))
+        
+        # chooses the word as a one hot encoding vector
+        w = vocabulary[batch[0]['category']][None,:].to(device)
 
-def main():
+        # shuffles the targets and distractors so receiver doesn't learn target based on position
+        if random.random()<0.5:
+            im1 = target_display
+            im2 = distractor_display
+            t = 0
+        else:            
+            im2 = target_display
+            im1 = distractor_display
+            t = 1
 
-    parser = argparse.ArgumentParser(description="Train agents to converge upon a language via a referential game.")
-    parser.add_argument('--seed', type = int, default = 0, help="Value used as the seed for random generators")
-    parser.add_argument('--conf', required=True, help="Location of configuration file for game.")
+        total_rounds += 1
+        print(f"Round {total_rounds}")
+        print(f"Sender sent word {w} for target {t}")
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(device)
+        # receiver "points" to an image
+        receiver_scores, receiver_prob_distribution, receiver_choice = receiver(im1,im2,w)
+        print(f"Receiver chose {receiver_choice} with a probability of {receiver_prob_distribution[receiver_choice]}")
 
-    args = parser.parse_args()
-    conf = args.conf
+        # checks if the receiver correctly chose the image
+        if receiver_choice == t:
+            print("Success!")
+            total_successes += 1
+        else:
+            print("Failure")
+        comm_success_rate.append(total_successes / total_rounds * 100)
+        # applies backpropagation of loss
+        optim_SGD.zero_grad()
+        L = loss(receiver_scores, torch.tensor([t]).to(device))
+        print(L)
+        print("_______________________________")
+        L.backward()
+        optim_SGD.step()
 
-    # Random seed
-    torch.manual_seed(args.seed)
-    np.random.seed(args.seed)
-    random.seed(args.seed)
+display_comm_succ_graph({"perfect sender, default receiver":comm_success_rate})
 
-    with open(conf) as g:
-        config = yaml.load(g, Loader=yaml.FullLoader)
-
-    run_game(config,device)
-
-if __name__ == '__main__':
-    main()

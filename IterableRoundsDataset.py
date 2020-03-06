@@ -63,8 +63,8 @@ class IterableRoundsDataset(IterableDataset):
         # [(0, [1,2,3,...]), (1, [1,2,3,...])]
         categorised_sublists = list(enumerate(cycle(x) for x in self.shuffled_sublists))
         # gives a tuple containing the category and the cycle of filenames to get_stream
+        # TODO: make this return a different set of tuples for each "round"
         return zip(*[self.get_stream(list) for list in categorised_sublists])
-        # return zip(*[self.get_stream([list]) for list in self.shuffled_sublists])
 
     def __iter__(self):
         return self.get_streams()
@@ -73,7 +73,7 @@ def main():
 
     random.seed(0)
 
-    img_dirs = ["dog-1", "cat-1"]
+    img_dirs = ["cat-1", "dog-1"]
     data_dir = "data"
 
     iterable_dataset = IterableRoundsDataset(img_dirs, data_dir, batch_size = 2)
@@ -82,7 +82,6 @@ def main():
 
     for batch in islice(loader, 5):
             # reshapes the image tensor into the expected shape
-            print(batch[0]["arr"].shape)
             target_display = batch[0]["arr"].permute(1, 2, 0)
             distractor_display = batch[1]["arr"].permute(1, 2, 0)
 
