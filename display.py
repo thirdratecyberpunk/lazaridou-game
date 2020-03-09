@@ -1,6 +1,27 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+def display_loss_graph(loss_rate):
+    """
+    Function to display loss rate over time as a graph
+
+    Parameters
+    ----------
+    loss_rate
+    """
+    fig = plt.figure()
+    ax = fig.add_subplot()
+    # for key, value in comm_succ.items():
+        # ax.plot(value, label = key)
+    ax.plot(loss_rate)
+    ax.set(title="Loss",
+            xlabel="Number of rounds",
+            ylabel="Loss")
+    # ax.set_ylim([0,100])
+    # ax.set_yticks(np.arange(0,100,10))
+    ax.legend(loc="lower right")
+    plt.show()
+
 def display_comm_succ_graph(comm_succ):
     """
     Function to display communication success rate of agents over time as a graph
