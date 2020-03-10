@@ -64,70 +64,103 @@ model = models.vgg16().to(device)
 
 receiver = Receiver(img_embed_dim, game_embed_dim, word_dict_dim).to(device)
 
-loss = nn.CrossEntropyLoss()
+# TODO: implement the loss function as defined in the paper
+# negative expectation of the payoff
+receiver_loss = nn.CrossEntropyLoss()
+
+def sender_loss(symbol_prob, payoff):
+    return torch.ones(1, requires_grad = True) 
 
 # TODO: try using Adam as the optimizer rather than stochastic gradient descent
-optim_SGD = optim.SGD(receiver.parameters(), lr=lr, momentum=0.5)
-# optimizer = optim.Adam(receiver.parameters(), lr = 0.001)
+receiver_optim_SGD = optim.SGD(receiver.parameters(), lr=lr, momentum=0.5)
+# sender_optim_SGD = optim.SGD(sender.parameters(), lr=lr, momentum = 0.5)
 
 total_rounds = 0
 total_successes = 0
 comm_success_rate = []
-loss_rate = []
+receiver_loss_rate = []
+sender_loss_rate = []
 num_rounds = 1
 
-vocabulary = torch.eye(word_dict_dim)
+vocabulary = torch.eye(word_dict_dim).to(device)
 
 for batch in islice(loader, epochs):
-        # displaying the batch as a diagram
-        # target = batch[0]["arr"].permute(1, 2, 0)
-        # distractor = batch[1]["arr"].permute(1, 2, 0)
-
-        # figures = [target, distractor]
-        # plot_figures(figures, 1, 2)
-
         # reshapes the image tensor into the expected shape
         target = model(batch[0]["arr"][None,:,:,:].to(device))
         distractor = model(batch[1]["arr"][None,:,:,:].to(device))
         
+        # SENDER LOGIC
+        # in this case, "perfect" play is assumed
+        # sender will always send the same word for the same category
         # chooses the word as a one hot encoding vector
         w = vocabulary[batch[0]['category']][None,:].to(device)
+        sender_scores = [1, 0]
+        # learning sender
 
         # shuffles the targets and distractors so receiver doesn't learn target based on position
         if random.random()<0.5:
             im1 = target
+            im1_category = batch[0]["category"]
             im2 = distractor
+            im2_category = batch[1]["category"]
             t = 0
         else:            
-            im2 = target
             im1 = distractor
+            im1_category = batch[1]["category"]
+            im2 = target
+            im2_category = batch[0]["category"]
             t = 1
 
         total_rounds += 1
         print(f"Round {total_rounds}")
         print(f"Sender sent word {w} for target {t}")
 
-        # receiver "points" to an image
-        receiver_scores, receiver_prob_distribution, receiver_choice = receiver(im1,im2,w)
-        print(f"Receiver chose {receiver_choice} with a probability of {receiver_prob_distribution[receiver_choice]}")
 
+        # RECEIVER LOGIC
+        # hardcoded "perfect" receiver
+        # receiver will always choose the given image for a given word
+        if torch.eq(w, vocabulary[im1_category]).all():
+            receiver_choice = 0
+        else:
+            receiver_choice = 1
+
+        print(f"Receiver chose {receiver_choice}")
+
+        # learning receiver
+        # receiver "points" to an image
+        # receiver_scores, receiver_prob_distribution, receiver_choice = receiver(im1,im2,w)
+        # print(f"Receiver chose {receiver_choice} with a probability of {receiver_prob_distribution[receiver_choice]}")
+
+        payoff = 0
         # checks if the receiver correctly chose the image
         if receiver_choice == t:
             print("Success!")
             total_successes += 1
+            payoff = 1
         else:
             print("Failure")
         comm_success_rate.append(total_successes / total_rounds * 100)
-        # applies backpropagation of loss
-        optim_SGD.zero_grad()
-        # optimizer.zero_grad()
-        L = loss(receiver_scores, torch.tensor([t]).to(device))
-        print(L)
-        print("_______________________________")
-        loss_rate.append(L)
-        L.backward()
-        optim_SGD.step()
-        # optimizer.zero_grad()
 
+
+        # # applies backpropagation of loss for receiver
+        # receiver_optim_SGD.zero_grad()
+        # receiver_loss_value = receiver_loss(receiver_scores, torch.tensor([t]).to(device))
+        # print(receiver_loss_value)
+        # print("_______________________________")
+        # receiver_loss_rate.append(receiver_loss_value)
+        # receiver_loss_value.backward()
+        # receiver_optim_SGD.step()
+
+
+        # # applies backpropagation of loss for sender
+        # sender_optim.SGD.zero_grad()
+        # sender_loss_value = sender_loss(sender_scores, payoff)
+        # print(sender_loss_value)
+        # print("_______________________________")
+        # sender_loss_rate.append(sender_loss_value)
+        # sender_loss_value.backward()
+        # sender_optim_SGD.step()
+
+print(f"{total_successes/total_rounds * 100}% games successful")
 display_loss_graph(loss_rate)
 # display_comm_succ_graph({"perfect sender, default receiver":comm_success_rate})
