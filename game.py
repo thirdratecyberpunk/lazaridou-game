@@ -30,18 +30,21 @@ import argparse
 from display import plot_figures, display_comm_succ_graph, display_loss_graph
 from IterableRoundsDataset import IterableRoundsDataset
 from architectures.receivers.Receiver import Receiver
+from architectures.senders.AgnosticSender import AgnosticSender
 
 parser = argparse.ArgumentParser(description="Train agents to converge upon a language via a referential game.")
 parser.add_argument('--seed', type = int, default = 0, help="Value used as the seed for random generators")
 parser.add_argument('--epochs', type= int, default = 100000, help="Number of epochs to run")
 parser.add_argument('--lr', type=float, default = 0.0001, help="Learning rate")
 parser.add_argument('--word_dict_dim', type=int, default= 2, help="Size of the vocabulary")
+parser.add_argument('--img_dict_dim', type=int, default= 2, help="Number of categories")
 
 args = parser.parse_args()
 seed = args.seed
 epochs = args.epochs
 lr = args.lr
 word_dict_dim = args.word_dict_dim
+img_dict_dim = args.img_dict_dim
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -49,7 +52,7 @@ torch.manual_seed(seed)
 np.random.seed(seed)
 random.seed(seed)
 
-img_dirs = ["cat-1", "mice-1"]
+img_dirs = ["cat-1", "dog-1"]
 data_dir = "data"
 
 iterable_dataset = IterableRoundsDataset(img_dirs, data_dir, batch_size = 2)
@@ -62,18 +65,18 @@ game_embed_dim = 32
 
 model = models.vgg16().to(device)
 
-receiver = Receiver(img_embed_dim, game_embed_dim, word_dict_dim).to(device)
+sender = AgnosticSender(img_embed_dim, game_embed_dim, word_dict_dim).to(device)
+
+receiver = Receiver(img_embed_dim, game_embed_dim, word_dict_dim, img_dict_dim).to(device)
 
 # TODO: implement the loss function as defined in the paper
 # negative expectation of the payoff
+sender_loss = nn.CrossEntropyLoss()
 receiver_loss = nn.CrossEntropyLoss()
-
-def sender_loss(symbol_prob, payoff):
-    return torch.ones(1, requires_grad = True) 
 
 # TODO: try using Adam as the optimizer rather than stochastic gradient descent
 receiver_optim_SGD = optim.SGD(receiver.parameters(), lr=lr, momentum=0.5)
-# sender_optim_SGD = optim.SGD(sender.parameters(), lr=lr, momentum = 0.5)
+sender_optim_SGD = optim.SGD(sender.parameters(), lr=lr, momentum = 0.5)
 
 total_rounds = 0
 total_successes = 0
@@ -93,9 +96,12 @@ for batch in islice(loader, epochs):
         # in this case, "perfect" play is assumed
         # sender will always send the same word for the same category
         # chooses the word as a one hot encoding vector
-        w = vocabulary[batch[0]['category']][None,:].to(device)
-        sender_scores = [1, 0]
+        # w = vocabulary[batch[0]['category']][None,:].to(device)
+        # sender_scores = [1, 0]
         # learning sender
+        sender_scores, sender_prob_distribution, w = sender(target, distractor)
+
+        sender_choice_prob = sender_prob_distribution[w]
 
         # shuffles the targets and distractors so receiver doesn't learn target based on position
         if random.random()<0.5:
@@ -113,23 +119,25 @@ for batch in islice(loader, epochs):
 
         total_rounds += 1
         print(f"Round {total_rounds}")
-        print(f"Sender sent word {w} for target {t}")
 
+        word_sent = vocabulary[w][None,:]
+
+        print(f"Sender sent word {word_sent} for target {t} with probability {sender_choice_prob}")
 
         # RECEIVER LOGIC
         # hardcoded "perfect" receiver
         # receiver will always choose the given image for a given word
-        if torch.eq(w, vocabulary[im1_category]).all():
-            receiver_choice = 0
-        else:
-            receiver_choice = 1
+        # if torch.eq(vocabulary[w], vocabulary[im1_category]).all():
+        #     receiver_choice = 0
+        # else:
+        #     receiver_choice = 1
 
-        print(f"Receiver chose {receiver_choice}")
+        # print(f"Receiver chose {receiver_choice}")
 
         # learning receiver
         # receiver "points" to an image
-        # receiver_scores, receiver_prob_distribution, receiver_choice = receiver(im1,im2,w)
-        # print(f"Receiver chose {receiver_choice} with a probability of {receiver_prob_distribution[receiver_choice]}")
+        receiver_scores, receiver_prob_distribution, receiver_choice = receiver(im1,im2,word_sent)
+        print(f"Receiver chose {receiver_choice} with a probability of {receiver_prob_distribution[receiver_choice]}")
 
         payoff = 0
         # checks if the receiver correctly chose the image
@@ -139,28 +147,27 @@ for batch in islice(loader, epochs):
             payoff = 1
         else:
             print("Failure")
+
         comm_success_rate.append(total_successes / total_rounds * 100)
 
+        # applies backpropagation of loss for receiver
+        receiver_optim_SGD.zero_grad()
+        receiver_loss_value = receiver_loss(receiver_scores, torch.tensor([t]).to(device))
+        print(receiver_loss_value)
+        print("_______________________________")
+        receiver_loss_rate.append(receiver_loss_value)
+        receiver_loss_value.backward()
+        receiver_optim_SGD.step()
 
-        # # applies backpropagation of loss for receiver
-        # receiver_optim_SGD.zero_grad()
-        # receiver_loss_value = receiver_loss(receiver_scores, torch.tensor([t]).to(device))
-        # print(receiver_loss_value)
-        # print("_______________________________")
-        # receiver_loss_rate.append(receiver_loss_value)
-        # receiver_loss_value.backward()
-        # receiver_optim_SGD.step()
-
-
-        # # applies backpropagation of loss for sender
-        # sender_optim.SGD.zero_grad()
-        # sender_loss_value = sender_loss(sender_scores, payoff)
-        # print(sender_loss_value)
-        # print("_______________________________")
-        # sender_loss_rate.append(sender_loss_value)
-        # sender_loss_value.backward()
-        # sender_optim_SGD.step()
+        # applies backpropagation of loss for sender
+        sender_optim_SGD.zero_grad()
+        sender_loss_value = sender_loss(sender_scores, torch.tensor([receiver_choice]).to(device))
+        print(sender_loss_value)
+        print("_______________________________")
+        sender_loss_rate.append(sender_loss_value)
+        sender_loss_value.backward()
+        sender_optim_SGD.step()
 
 print(f"{total_successes/total_rounds * 100}% games successful")
-display_loss_graph(loss_rate)
+# display_loss_graph(loss_rate)
 # display_comm_succ_graph({"perfect sender, default receiver":comm_success_rate})
