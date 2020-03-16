@@ -38,10 +38,10 @@ class AgnosticSender(nn.Module):
         # generates scores for each vocabulary symbol by applying weights 
         target_score = self.embed_linear(target_sig)
         distractor_score = self.embed_linear(distractor_sig)
-        scores = torch.tensor([target_score, distractor_score], requires_grad=True)
+        scores = torch.tensor([[target_score, distractor_score]], requires_grad=True)
         scores_no_grad = scores.clone().detach()
         # generates a probability distribution from the scores
-        prob_distribution = self.softmax(scores_no_grad).cpu().numpy()
+        prob_distribution = self.softmax(scores_no_grad[0]).cpu().numpy()
         # converts dot products into Gibbs distribution
         # choose word symbol by sampling from Gibbs distribution
         selection = np.random.choice(np.arange(self.word_dict_dim), p=prob_distribution)

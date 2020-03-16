@@ -153,20 +153,18 @@ for batch in islice(loader, epochs):
         # applies backpropagation of loss for receiver
         receiver_optim_SGD.zero_grad()
         receiver_loss_value = receiver_loss(receiver_scores, torch.tensor([t]).to(device))
-        print(receiver_loss_value)
-        print("_______________________________")
         receiver_loss_rate.append(receiver_loss_value)
         receiver_loss_value.backward()
-        receiver_optim_SGD.step()
 
         # applies backpropagation of loss for sender
         sender_optim_SGD.zero_grad()
-        sender_loss_value = sender_loss(sender_scores, torch.tensor([receiver_choice]).to(device))
-        print(sender_loss_value)
-        print("_______________________________")
+        receiver_choice_tensor = torch.tensor([receiver_choice]).to(device)
+        sender_loss_value = sender_loss(sender_scores.to(device), torch.tensor([t]).to(device))
         sender_loss_rate.append(sender_loss_value)
         sender_loss_value.backward()
         sender_optim_SGD.step()
+
+        print(f"Sender loss {sender_loss_value}, receiver loss {receiver_loss_value}")
 
 print(f"{total_successes/total_rounds * 100}% games successful")
 # display_loss_graph(loss_rate)
